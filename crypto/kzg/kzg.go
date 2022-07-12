@@ -46,7 +46,7 @@ type BlobsBatch struct {
 	aggregateBlob       [params.FieldElementsPerBlob]bls.Fr
 }
 
-func (batch *BlobsBatch) Join(commitments []*bls.G1Point, blobs [][]bls.Fr) error {
+func (batch *BlobsBatch) Join(commitments []*bls.G1Point, blobs [][]bls.Fr, aggregateProof *bls.G1Point) error {
 	batch.Lock()
 	defer batch.Unlock()
 	if len(commitments) != len(blobs) {
@@ -114,7 +114,7 @@ func (batch *BlobsBatch) Verify() error {
 // By regrouping the above equation around the `L` points we can reduce the length of the MSM further
 // (down to just `n` scalar multiplications) by making it look like this:
 //     (r_0*b0_0 + r_1*b1_0 + r_2*b2_0) * L_0 + (r_0*b0_1 + r_1*b1_1 + r_2*b2_1) * L_1
-func VerifyBlobs(commitments []*bls.G1Point, blobs [][]bls.Fr) error {
+func VerifyBlobsLegacy(commitments []*bls.G1Point, blobs [][]bls.Fr) error {
 	// Prepare objects to hold our two MSMs
 	lPoints := make([]bls.G1Point, params.FieldElementsPerBlob)
 	lScalars := make([]bls.Fr, params.FieldElementsPerBlob)
@@ -163,6 +163,58 @@ func VerifyBlobs(commitments []*bls.G1Point, blobs [][]bls.Fr) error {
 	return nil
 }
 
+// ComputeProof returns KZG Proof of polynomial in evaluation form
+func ComputeProof(eval []bls.Fr, x *bls.Fr) (*bls.G1Point, error) {
+	poly, err := inverseFFT(eval)
+	if err != nil {
+		return nil, err
+	}
+
+	// divisor = [-x, 1]
+	divisor := [2]bls.Fr{}
+	bls.SubModFr(&divisor[0], &bls.ZERO, x)
+	bls.CopyFr(&divisor[1], &bls.ONE)
+	quotientPolynomial := polyLongDiv(poly, divisor[:])
+	// evaluate quotient poly at shared secret, in G1
+	return bls.LinCombG1(KzgSetupG1[:len(quotientPolynomial)], quotientPolynomial), nil
+}
+
+func polyLongDiv(dividend []bls.Fr, divisor []bls.Fr) []bls.Fr {
+	a := make([]bls.Fr, len(dividend))
+	for i := 0; i < len(a); i++ {
+		bls.CopyFr(&a[i], &dividend[i])
+	}
+	aPos := len(a) - 1
+	bPos := len(divisor) - 1
+	diff := aPos - bPos
+	out := make([]bls.Fr, diff+1)
+	for diff >= 0 {
+		quot := &out[diff]
+		polyFactorDiv(quot, &a[aPos], &divisor[bPos])
+		var tmp, tmp2 bls.Fr
+		for i := bPos; i >= 0; i-- {
+			// In steps: a[diff + i] -= b[i] * quot
+			// tmp =  b[i] * quot
+			bls.MulModFr(&tmp, quot, &divisor[i])
+			// tmp2 = a[diff + i] - tmp
+			bls.SubModFr(&tmp2, &a[diff+i], &tmp)
+			// a[diff + i] = tmp2
+			bls.CopyFr(&a[diff+i], &tmp2)
+		}
+		aPos -= 1
+		diff -= 1
+	}
+	return out
+}
+
+// Helper: invert the divisor, then multiply
+func polyFactorDiv(dst *bls.Fr, a *bls.Fr, b *bls.Fr) {
+	// TODO: use divmod instead.
+	var tmp bls.Fr
+	bls.InvModFr(&tmp, b)
+	bls.MulModFr(dst, &tmp, a)
+}
+
 type JSONTrustedSetup struct {
 	SetupG1       []bls.G1Point
 	SetupG2       []bls.G2Point
@@ -182,4 +234,6 @@ func init() {
 	kzgSetupG2 = parsedSetup.SetupG2
 	kzgSetupLagrange = parsedSetup.SetupLagrange
 	KzgSetupG1 = parsedSetup.SetupG1
+
+	initDomain()
 }

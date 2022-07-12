@@ -4,10 +4,14 @@ import (
 	"math"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 	gokzg "github.com/protolambda/go-kzg"
 	"github.com/protolambda/go-kzg/bls"
+	"github.com/protolambda/ztyp/view"
 )
 
 func randomBlob() []bls.Fr {
@@ -27,16 +31,47 @@ func BenchmarkBlobToKzg(b *testing.B) {
 }
 
 func BenchmarkVerifyBlobs(b *testing.B) {
-	var blobs [][]bls.Fr
-	var commitments []*bls.G1Point
-	for i := 0; i < 16; i++ {
-		blob := randomBlob()
-		blobs = append(blobs, blob)
-		commitments = append(commitments, kzg.BlobToKzg(blob))
+	blobs := make([]types.Blob, 2)
+	var commitments []types.KZGCommitment
+	var hashes []common.Hash
+	for i := 0; i < len(blobs); i++ {
+		tmp := randomBlob()
+		for j := range tmp {
+			blobs[i][j] = bls.FrTo32(&tmp[j])
+		}
+		c, ok := blobs[i].ComputeCommitment()
+		if !ok {
+			b.Fatal("Could not compute commitment")
+		}
+		commitments = append(commitments, c)
+		hashes = append(hashes, c.ComputeVersionedHash())
 	}
+	txData := &types.SignedBlobTx{
+		Message: types.BlobTxMessage{
+			ChainID:             view.Uint256View(*uint256.NewInt(1)),
+			Nonce:               view.Uint64View(0),
+			Gas:                 view.Uint64View(123457),
+			GasTipCap:           view.Uint256View(*uint256.NewInt(42)),
+			GasFeeCap:           view.Uint256View(*uint256.NewInt(10)),
+			BlobVersionedHashes: hashes,
+		},
+	}
+	_, _, aggregatedProof, err := types.Blobs(blobs).ComputeCommitmentsAndAggregatedProof()
+	if err != nil {
+		b.Fatal(err)
+	}
+	wrapData := &types.BlobTxWrapData{
+		BlobKzgs:           commitments,
+		Blobs:              blobs,
+		KzgAggregatedProof: aggregatedProof,
+	}
+	tx := types.NewTx(txData, types.WithTxWrapData(wrapData))
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		kzg.VerifyBlobs(commitments, blobs)
+		if err := tx.VerifyBlobs(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
