@@ -1,11 +1,11 @@
 package types
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -381,13 +381,13 @@ func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGComm
 			aggregateBlob[i] = bls.FrTo32(&aggregatePoly[i])
 		}
 		root := tree.GetHashFn().HashTreeRoot(&aggregateBlob, &aggregateCommitment)
+		var z bls.Fr
+		hashToFr(&z, root)
 
-		var x bls.Fr
-		bls.AsFr(&x, binary.BigEndian.Uint64(root[:]))
 		var y bls.Fr
-		kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], &x)
+		kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], &z)
 
-		aggProofG1, err := kzg.ComputeProof(aggregatePoly, &x)
+		aggProofG1, err := kzg.ComputeProof(aggregatePoly, &z)
 		if err != nil {
 			return nil, nil, KZGProof{}, err
 		}
@@ -482,17 +482,17 @@ func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
 	var aggregateCommitment KZGCommitment
 	copy(aggregateCommitment[:], bls.ToCompressedG1(aggregateCommitmentG1))
 	root := tree.GetHashFn().HashTreeRoot(&aggregateBlob, &aggregateCommitment)
+	var z bls.Fr
+	hashToFr(&z, root)
 
-	var x bls.Fr
-	bls.AsFr(&x, binary.BigEndian.Uint64(root[:]))
 	var y bls.Fr
-	kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], &x)
+	kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], &z)
 
 	aggregateProofG1, err := b.KzgAggregatedProof.Point()
 	if err != nil {
 		return fmt.Errorf("aggregate proof parse error: %v", err)
 	}
-	if !kzg.VerifyKzgProof(aggregateCommitmentG1, &x, &y, aggregateProofG1) {
+	if !kzg.VerifyKzgProof(aggregateCommitmentG1, &z, &y, aggregateProofG1) {
 		return errors.New("failed to verify kzg")
 	}
 	return nil
@@ -551,7 +551,8 @@ func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]
 	hasher := randomChallengeHasher{blobs, commitments}
 	root := hasher.HashTreeRoot(tree.GetHashFn())
 	var r bls.Fr
-	bls.AsFr(&r, binary.BigEndian.Uint64(root[:]))
+	hashToFr(&r, root)
+
 	powers := computePowers(&r, len(blobs))
 
 	commitmentsG1 := make([]bls.G1Point, len(commitments))
@@ -569,4 +570,9 @@ func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]
 	}
 	aggregatePoly := kzg.MatrixLinComb(polys, powers)
 	return aggregatePoly, aggregateCommitmentG1, nil
+}
+
+func hashToFr(out *bls.Fr, root tree.Root) {
+	zB := new(big.Int).Mod(new(big.Int).SetBytes(root[:]), kzg.BLSModulus)
+	kzg.BigToFr(out, zB)
 }

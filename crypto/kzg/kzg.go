@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/params"
+
 	"github.com/protolambda/go-kzg/bls"
 )
 
@@ -163,20 +165,48 @@ func VerifyBlobsLegacy(commitments []*bls.G1Point, blobs [][]bls.Fr) error {
 	return nil
 }
 
-// ComputeProof returns KZG Proof of polynomial in evaluation form
-func ComputeProof(eval []bls.Fr, x *bls.Fr) (*bls.G1Point, error) {
-	poly, err := inverseFFT(eval)
-	if err != nil {
-		return nil, err
+// ComputeProof returns KZG Proof of polynomial in evaluation form at point z
+func ComputeProof(eval []bls.Fr, z *bls.Fr) (*bls.G1Point, error) {
+	if len(eval) != params.FieldElementsPerBlob {
+		return nil, errors.New("invalid eval polynomial for proof")
 	}
 
-	// divisor = [-x, 1]
-	divisor := [2]bls.Fr{}
-	bls.SubModFr(&divisor[0], &bls.ZERO, x)
-	bls.CopyFr(&divisor[1], &bls.ONE)
-	quotientPolynomial := polyLongDiv(poly, divisor[:])
-	// evaluate quotient poly at shared secret, in G1
-	return bls.LinCombG1(KzgSetupG1[:len(quotientPolynomial)], quotientPolynomial), nil
+	// To avoid overflow/underflow, convert elements into int
+	var poly [params.FieldElementsPerBlob]big.Int
+	for i := range poly {
+		frToBig(&poly[i], &eval[i])
+	}
+	var zB big.Int
+	frToBig(&zB, z)
+
+	// Shift our polynomial first (in evaluation form we can't handle the division remainder)
+	var yB big.Int
+	var y bls.Fr
+	EvaluatePolyInEvaluationForm(&y, eval, z)
+	frToBig(&yB, &y)
+	var polyShifted [params.FieldElementsPerBlob]big.Int
+
+	for i := range polyShifted {
+		polyShifted[i].Mod(new(big.Int).Sub(&poly[i], &yB), BLSModulus)
+	}
+
+	var denomPoly [params.FieldElementsPerBlob]big.Int
+	for i := range denomPoly {
+		// Make sure we won't induce a division by zero later. Shouldn't happen if using Fiat-Shamir challenges
+		if Domain[i].Cmp(&zB) == 0 {
+			return nil, errors.New("inavlid z challenge")
+		}
+		denomPoly[i].Mod(new(big.Int).Sub(Domain[i], &zB), BLSModulus)
+	}
+
+	// Calculate quotient polynomial by doing point-by-point division
+	var quotientPoly [params.FieldElementsPerBlob]bls.Fr
+	for i := range quotientPoly {
+		var tmp big.Int
+		blsDiv(&tmp, &polyShifted[i], &denomPoly[i])
+		BigToFr(&quotientPoly[i], &tmp)
+	}
+	return bls.LinCombG1(kzgSetupLagrange, quotientPoly[:]), nil
 }
 
 func polyLongDiv(dividend []bls.Fr, divisor []bls.Fr) []bls.Fr {

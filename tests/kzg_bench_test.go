@@ -31,7 +31,7 @@ func BenchmarkBlobToKzg(b *testing.B) {
 }
 
 func BenchmarkVerifyBlobs(b *testing.B) {
-	blobs := make([]types.Blob, 2)
+	blobs := make([]types.Blob, params.MaxBlobsPerTx)
 	var commitments []types.KZGCommitment
 	var hashes []common.Hash
 	for i := 0; i < len(blobs); i++ {
