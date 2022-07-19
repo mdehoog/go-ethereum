@@ -10,6 +10,7 @@ import (
 var (
 	BLSModulus *big.Int
 	Domain     [params.FieldElementsPerBlob]*big.Int
+	DomainFr   [params.FieldElementsPerBlob]bls.Fr
 )
 
 func initDomain() {
@@ -19,10 +20,11 @@ func initDomain() {
 	// ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)
 	primitiveRoot := big.NewInt(7)
 	width := big.NewInt(int64(params.FieldElementsPerBlob))
-	exp := new(big.Int).Div(new(big.Int).Sub(BLSModulus, big.NewInt(-1)), width)
+	exp := new(big.Int).Div(new(big.Int).Sub(BLSModulus, big.NewInt(1)), width)
 	rootOfUnity := new(big.Int).Exp(primitiveRoot, exp, BLSModulus)
 	for i := 0; i < params.FieldElementsPerBlob; i++ {
 		Domain[i] = new(big.Int).Exp(rootOfUnity, big.NewInt(int64(i)), BLSModulus)
+		BigToFr(&DomainFr[i], Domain[i])
 	}
 }
 
@@ -49,30 +51,33 @@ func EvaluatePolyInEvaluationForm(yFr *bls.Fr, poly []bls.Fr, x *bls.Fr) {
 	var inverseWidth big.Int
 	blsModInv(&inverseWidth, width)
 
-	xB := new(big.Int)
-	frToBig(xB, x)
-	y := new(big.Int)
+	var y bls.Fr
 	for i := 0; i < params.FieldElementsPerBlob; i++ {
-		// To avoid overflow/underflow, convert element into int
-		var fi big.Int
-		var num big.Int
-		frToBig(&fi, &poly[i])
-		num.Mul(&fi, Domain[i])
+		var num bls.Fr
+		bls.MulModFr(&num, &poly[i], &DomainFr[i])
 
-		var denom big.Int
-		denom.Sub(xB, Domain[i])
+		var denom bls.Fr
+		bls.SubModFr(&denom, x, &DomainFr[i])
 
-		var div big.Int
-		blsDiv(&div, &num, &denom)
-		y.Add(y, &div)
+		var div bls.Fr
+		bls.DivModFr(&div, &num, &denom)
+
+		var tmp bls.Fr
+		bls.AddModFr(&tmp, &y, &div)
+		bls.CopyFr(&y, &tmp)
 	}
 
+	xB := new(big.Int)
+	frToBig(xB, x)
 	powB := new(big.Int).Exp(xB, width, BLSModulus)
 	powB.Sub(powB, big.NewInt(1))
 
-	y.Mul(y, new(big.Int).Mul(powB, &inverseWidth))
-	y.Mod(y, BLSModulus)
-	bls.SetFr(yFr, y.String())
+	// TODO: add ExpModFr to go-kzg
+	var yB big.Int
+	frToBig(&yB, &y)
+	yB.Mul(&yB, new(big.Int).Mul(powB, &inverseWidth))
+	yB.Mod(&yB, BLSModulus)
+	bls.SetFr(yFr, yB.String())
 }
 
 func frToBig(b *big.Int, val *bls.Fr) {
