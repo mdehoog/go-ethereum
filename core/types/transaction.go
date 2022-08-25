@@ -109,6 +109,7 @@ type TxData interface {
 
 	chainID() *big.Int
 	accessList() AccessList
+	dataHashes() []common.Hash
 	data() []byte
 	gas() uint64
 	gasPrice() *big.Int
@@ -369,6 +370,9 @@ func (tx *Transaction) Data() []byte { return tx.inner.data() }
 // AccessList returns the access list of the transaction.
 func (tx *Transaction) AccessList() AccessList { return tx.inner.accessList() }
 
+// DataHashes returns the blob versioned hashes of the transaction.
+func (tx *Transaction) DataHashes() []common.Hash { return tx.inner.dataHashes() }
+
 // Gas returns the gas limit of the transaction.
 func (tx *Transaction) Gas() uint64 { return tx.inner.gas() }
 
@@ -545,6 +549,7 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 	return out, nil
 }
 
+// TODO(EIP-4844): Remove, given DataHashes()
 func (tx *Transaction) BlobVersionedHashes() []common.Hash {
 	blobTx, ok := tx.inner.(*SignedBlobTx)
 	if !ok {

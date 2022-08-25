@@ -22,7 +22,7 @@ func initDomain() {
 	width := big.NewInt(int64(params.FieldElementsPerBlob))
 	exp := new(big.Int).Div(new(big.Int).Sub(BLSModulus, big.NewInt(1)), width)
 	rootOfUnity := new(big.Int).Exp(primitiveRoot, exp, BLSModulus)
-	for i := 0; i < params.FieldElementsPerBlob; i++ {
+	for i := uint64(0); i < params.FieldElementsPerBlob; i++ {
 		Domain[i] = new(big.Int).Exp(rootOfUnity, big.NewInt(int64(i)), BLSModulus)
 		_ = BigToFr(&DomainFr[i], Domain[i])
 	}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -116,7 +117,7 @@ func (result *ExecutionResult) Revert() []byte {
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, accessList types.AccessList, blobCount int, isContractCreation bool, isHomestead, isEIP2028 bool) (uint64, error) {
+func IntrinsicGas(data []byte, accessList types.AccessList, blobCount int, blockExcessBlobs uint64, isContractCreation bool, isHomestead, isEIP2028 bool, isEIP4844 bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
 	if isContractCreation && isHomestead {
@@ -153,8 +154,14 @@ func IntrinsicGas(data []byte, accessList types.AccessList, blobCount int, isCon
 		gas += uint64(len(accessList)) * params.TxAccessListAddressGas
 		gas += uint64(accessList.StorageKeys()) * params.TxAccessListStorageKeyGas
 	}
-	gas += uint64(blobCount) * params.BlobGas
+	if isEIP4844 {
+		gas += uint64(blobCount) * getBlobGas(blockExcessBlobs)
+	}
 	return gas, nil
+}
+
+func getBlobGas(blockExcessBlobs uint64) uint64 {
+	return misc.FakeExponential(blockExcessBlobs, params.GasPriceUpdateFractionPerBlob)
 }
 
 // NewStateTransition initialises and returns a new state transition object.
@@ -305,7 +312,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), len(st.msg.DataHashes()), contractCreation, rules.IsHomestead, rules.IsIstanbul)
+	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), len(st.msg.DataHashes()), st.evm.Context.ExcessBlobs, contractCreation, rules.IsHomestead, rules.IsIstanbul, rules.IsSharding)
 	if err != nil {
 		return nil, err
 	}
