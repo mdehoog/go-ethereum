@@ -1284,7 +1284,7 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		Input:               hexutil.Bytes(tx.Data()),
 		Nonce:               hexutil.Uint64(tx.Nonce()),
 		To:                  tx.To(),
-		BlobVersionedHashes: tx.BlobVersionedHashes(),
+		BlobVersionedHashes: tx.DataHashes(),
 		Value:               (*hexutil.Big)(tx.Value()),
 		V:                   (*hexutil.Big)(v),
 		R:                   (*hexutil.Big)(r),

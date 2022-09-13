@@ -384,7 +384,12 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	}
 
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), len(tx.BlobVersionedHashes()), header.ExcessBlobs, tx.To() == nil, true, pool.istanbul, pool.eip4844)
+	rules := core.IntrinsicGasChainRules{
+		Homestead: true,
+		EIP2028:   pool.istanbul,
+		EIP4844:   pool.eip4844,
+	}
+	gas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), len(tx.DataHashes()), header.ExcessBlobs, tx.To() == nil, rules)
 	if err != nil {
 		return err
 	}

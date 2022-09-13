@@ -43,7 +43,7 @@ func FakeExponential(num uint64, denom uint64) uint64 {
 func CountBlobs(txs []*types.Transaction) int {
 	var count int
 	for _, tx := range txs {
-		count += len(tx.BlobVersionedHashes())
+		count += len(tx.DataHashes())
 	}
 	return count
 }

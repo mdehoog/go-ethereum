@@ -549,15 +549,6 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 	return out, nil
 }
 
-// TODO(EIP-4844): Remove, given DataHashes()
-func (tx *Transaction) BlobVersionedHashes() []common.Hash {
-	blobTx, ok := tx.inner.(*SignedBlobTx)
-	if !ok {
-		return nil
-	}
-	return blobTx.Message.BlobVersionedHashes
-}
-
 // Transactions implements DerivableList for transactions.
 type Transactions []*Transaction
 
@@ -784,7 +775,7 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		amount:     tx.Value(),
 		data:       tx.Data(),
 		accessList: tx.AccessList(),
-		dataHashes: tx.BlobVersionedHashes(),
+		dataHashes: tx.DataHashes(),
 		isFake:     false,
 	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
