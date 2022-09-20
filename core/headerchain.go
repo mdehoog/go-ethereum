@@ -98,6 +98,7 @@ func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine c
 	}
 	hc.genesisHeader = hc.GetHeaderByNumber(0)
 	if hc.genesisHeader == nil {
+		fmt.Println("Boop no genesis")
 		return nil, ErrNoGenesis
 	}
 	hc.currentHeader.Store(hc.genesisHeader)

@@ -177,23 +177,22 @@ func TestShardingExecutePayloadV1(t *testing.T) {
 	block := blocks[9]
 
 	fakeBlock := types.NewBlock(&types.Header{
-		ParentHash:    block.ParentHash(),
-		UncleHash:     crypto.Keccak256Hash(nil),
-		Coinbase:      block.Coinbase(),
-		Root:          block.Root(),
-		TxHash:        crypto.Keccak256Hash(nil),
-		ReceiptHash:   crypto.Keccak256Hash(nil),
-		Bloom:         block.Bloom(),
-		Difficulty:    big.NewInt(0),
-		Number:        block.Number(),
-		GasLimit:      block.GasLimit(),
-		GasUsed:       block.GasUsed(),
-		Time:          block.Time(),
-		Extra:         block.Extra(),
-		MixDigest:     block.MixDigest(),
-		Nonce:         types.BlockNonce{},
-		BaseFee:       block.BaseFee(),
-		ExcessDataGas: block.ExcessDataGas(),
+		ParentHash:  block.ParentHash(),
+		UncleHash:   crypto.Keccak256Hash(nil),
+		Coinbase:    block.Coinbase(),
+		Root:        block.Root(),
+		TxHash:      crypto.Keccak256Hash(nil),
+		ReceiptHash: crypto.Keccak256Hash(nil),
+		Bloom:       block.Bloom(),
+		Difficulty:  big.NewInt(0),
+		Number:      block.Number(),
+		GasLimit:    block.GasLimit(),
+		GasUsed:     block.GasUsed(),
+		Time:        block.Time(),
+		Extra:       block.Extra(),
+		MixDigest:   block.MixDigest(),
+		Nonce:       types.BlockNonce{},
+		BaseFee:     block.BaseFee(),
 	}, nil, nil, nil, trie.NewStackTrie(nil))
 
 	_, err := api.ExecutePayloadV1(beacon.ExecutableDataV1{
@@ -209,7 +208,6 @@ func TestShardingExecutePayloadV1(t *testing.T) {
 		Timestamp:     fakeBlock.Time(),
 		ExtraData:     fakeBlock.Extra(),
 		BaseFeePerGas: fakeBlock.BaseFee(),
-		ExcessDataGas: fakeBlock.ExcessDataGas(),
 		BlockHash:     fakeBlock.Hash(),
 		Transactions:  encodeTransactions(fakeBlock.Transactions()),
 	})
