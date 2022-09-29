@@ -65,7 +65,7 @@ func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
 // have the current block number available, use MakeSigner instead.
 func LatestSigner(config *params.ChainConfig) Signer {
 	if config.ChainID != nil {
-		if config.ShardingForkBlock != nil {
+		if config.ShardingTime != nil {
 			return NewDankSigner(config.ChainID)
 		}
 		if config.LondonBlock != nil {

@@ -3907,7 +3907,7 @@ func TestDataBlobTxs(t *testing.T) {
 
 	gspec.Config.BerlinBlock = common.Big0
 	gspec.Config.LondonBlock = common.Big0
-	gspec.Config.ShardingForkBlock = common.Big0
+	gspec.Config.ShardingTime = common.Big0
 	genesis := gspec.MustCommit(db)
 	signer := types.LatestSigner(gspec.Config)
 

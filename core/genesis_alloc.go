@@ -907,7 +907,7 @@ const eip4844AllocData = `{
     "muirGlacierBlock": 0,
     "berlinBlock": 0,
     "londonBlock": 0,
-    "shardingForkBlock": 0,
+    "shardingTime": 0,
     "clique": {
       "period": 14,
       "epoch": 30000
