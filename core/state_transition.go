@@ -294,7 +294,7 @@ func (st *StateTransition) preCheck() error {
 			}
 		}
 	}
-	usesDataGas := st.dataGasUsed().Uint64() != 0
+	usesDataGas := st.dataGasUsed().Sign() > 0
 	if usesDataGas && st.evm.ChainConfig().IsSharding(st.evm.Context.BlockNumber) {
 		dataGasPrice := misc.GetDataGasPrice(st.evm.Context.ExcessDataGas)
 		if dataGasPrice.Cmp(st.maxFeePerDataGas) > 0 {
