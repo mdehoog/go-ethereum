@@ -1923,7 +1923,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		SetDNSDiscoveryDefaults(cfg, params.KilnGenesisHash)
 	case ctx.Bool(Eip4844Flag.Name):
 		if !ctx.IsSet(NetworkIdFlag.Name) {
-			cfg.NetworkId = 1331
+			cfg.NetworkId = 1332
 		}
 		cfg.Genesis = core.DefaultEIP4844GenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.Eip4844GenesisHash)
