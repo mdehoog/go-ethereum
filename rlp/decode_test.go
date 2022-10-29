@@ -439,6 +439,11 @@ type optionalPtrField struct {
 	B *[3]byte `rlp:"optional"`
 }
 
+type multipleOptionalFields struct {
+	A *[3]byte `rlp:"optional"`
+	B *[3]byte `rlp:"optional"`
+}
+
 type optionalPtrFieldNil struct {
 	A uint
 	B *[3]byte `rlp:"optional,nil"`
@@ -743,6 +748,23 @@ var decodeTests = []decodeTest{
 		input: "C50183010203",
 		ptr:   new(optionalPtrField),
 		value: optionalPtrField{A: 1, B: &[3]byte{1, 2, 3}},
+	},
+	{
+		input: "C88301020383010203",
+		ptr:   new(multipleOptionalFields),
+		value: multipleOptionalFields{A: &[3]byte{1, 2, 3}, B: &[3]byte{1, 2, 3}},
+	},
+	{
+		// first optional field is nil, second non-nil
+		input: "C58083010203",
+		ptr:   new(multipleOptionalFields),
+		value: multipleOptionalFields{A: nil, B: &[3]byte{1, 2, 3}},
+	},
+	{
+		// all nil
+		input: "C0",
+		ptr:   new(multipleOptionalFields),
+		value: multipleOptionalFields{A: nil, B: nil},
 	},
 	{
 		input: "C101",

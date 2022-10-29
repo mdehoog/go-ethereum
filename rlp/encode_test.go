@@ -290,7 +290,9 @@ var encTests = []encTest{
 	{val: &optionalBigIntField{A: 1}, output: "C101"},
 	{val: &optionalPtrField{A: 1}, output: "C101"},
 	{val: &optionalPtrFieldNil{A: 1}, output: "C101"},
-
+	{val: &multipleOptionalFields{A: &[3]byte{1, 2, 3}, B: &[3]byte{1, 2, 3}}, output: "C88301020383010203"},
+	{val: &multipleOptionalFields{A: nil, B: &[3]byte{1, 2, 3}}, output: "C58083010203"},
+	{val: &multipleOptionalFields{A: nil, B: nil}, output: "C0"},
 	// nil
 	{val: (*uint)(nil), output: "80"},
 	{val: (*string)(nil), output: "80"},
