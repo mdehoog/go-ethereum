@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -106,7 +107,7 @@ type ConsensusAPI struct {
 	//     problematic, so we will only track the head chain segment of a bad
 	//     chain to allow discarding progressing bad chains and side chains,
 	//     without tracking too much bad data.
-	invalidBlocksHits map[common.Hash]int           // Emhemeral cache to track invalid blocks and their hit count
+	invalidBlocksHits map[common.Hash]int           // Ephemeral cache to track invalid blocks and their hit count
 	invalidTipsets    map[common.Hash]*types.Header // Ephemeral cache to track invalid tipsets and their bad ancestor
 	invalidLock       sync.Mutex                    // Protects the invalid maps from concurrent access
 
@@ -280,23 +281,21 @@ func (api *ConsensusAPI) ForkchoiceUpdatedV1(update beacon.ForkchoiceStateV1, pa
 	}
 	// If payload generation was requested, create a new block to be potentially
 	// sealed by the beacon client. The payload will be requested later, and we
-	// might replace it arbitrarily many times in between.
+	// will replace it arbitrarily many times in between.
 	if payloadAttributes != nil {
-		// Create an empty block first which can be used as a fallback
-		empty, err := api.eth.Miner().GetSealingBlockSync(update.HeadBlockHash, payloadAttributes.Timestamp, payloadAttributes.SuggestedFeeRecipient, payloadAttributes.Random, true)
-		if err != nil {
-			log.Error("Failed to create empty sealing payload", "err", err)
-			return valid(nil), beacon.InvalidPayloadAttributes.With(err)
+		args := &miner.BuildPayloadArgs{
+			Parent:       update.HeadBlockHash,
+			Timestamp:    payloadAttributes.Timestamp,
+			FeeRecipient: payloadAttributes.SuggestedFeeRecipient,
+			Random:       payloadAttributes.Random,
 		}
-		// Send a request to generate a full block in the background.
-		// The result can be obtained via the returned channel.
-		resCh, err := api.eth.Miner().GetSealingBlockAsync(update.HeadBlockHash, payloadAttributes.Timestamp, payloadAttributes.SuggestedFeeRecipient, payloadAttributes.Random, false)
+		payload, err := api.eth.Miner().BuildPayload(args)
 		if err != nil {
-			log.Error("Failed to create async sealing payload", "err", err)
+			log.Error("Failed to build payload", "err", err)
 			return valid(nil), beacon.InvalidPayloadAttributes.With(err)
 		}
 		id := computePayloadId(update.HeadBlockHash, payloadAttributes)
-		api.localBlocks.put(id, &payload{empty: empty, result: resCh})
+		api.localBlocks.put(id, payload)
 		return valid(&id), nil
 	}
 	return valid(nil), nil
@@ -335,21 +334,24 @@ func (api *ConsensusAPI) ExchangeTransitionConfigurationV1(config beacon.Transit
 // GetPayloadV1 returns a cached payload by id.
 func (api *ConsensusAPI) GetPayloadV1(payloadID beacon.PayloadID) (*beacon.ExecutableDataV1, error) {
 	log.Trace("Engine API request received", "method", "GetPayload", "id", payloadID)
-	block := api.localBlocks.get(payloadID)
-	if block == nil {
+	data := api.localBlocks.get(payloadID)
+	if data == nil {
 		return nil, beacon.UnknownPayload
 	}
-	return beacon.BlockToExecutableData(block), nil
+	return data, nil
 }
 
 // GetBlobsBundleV1 returns a bundle of all blob and corresponding KZG commitments by payload id
 func (api *ConsensusAPI) GetBlobsBundleV1(payloadID beacon.PayloadID) (*beacon.BlobsBundleV1, error) {
 	log.Trace("Engine API request received", "method", "GetBlobsBundle")
-	block := api.localBlocks.get(payloadID)
-	if block == nil {
+	data, err := api.localBlocks.getBlobsBundle(payloadID)
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
 		return nil, beacon.UnknownPayload
 	}
-	return beacon.BlockToBlobData(block)
+	return data, nil
 }
 
 // NewPayloadV1 creates an Eth1 block, inserts it in the chain, and returns the status of the chain.

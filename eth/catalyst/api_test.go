@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -92,12 +93,21 @@ func TestEth2AssembleBlock(t *testing.T) {
 	blockParams := beacon.PayloadAttributesV1{
 		Timestamp: blocks[9].Time() + 5,
 	}
-	execData, err := assembleBlock(api, blocks[9].Hash(), &blockParams)
-	if err != nil {
-		t.Fatalf("error producing block, err=%v", err)
+	// This test is a bit time-sensitive, the miner needs to pick up on the
+	// txs in the pool. Therefore, we retry once if it fails on the first attempt.
+	var testErr error
+	for retries := 2; retries > 0; retries-- {
+		if execData, err := assembleBlock(api, blocks[9].Hash(), &blockParams); err != nil {
+			t.Fatalf("error producing block, err=%v", err)
+		} else if have, want := len(execData.Transactions), 1; have != want {
+			testErr = fmt.Errorf("invalid number of transactions, have %d want %d", have, want)
+		} else {
+			testErr = nil
+			break
+		}
 	}
-	if len(execData.Transactions) != 1 {
-		t.Fatalf("invalid number of transactions %d != 1", len(execData.Transactions))
+	if testErr != nil {
+		t.Fatal(testErr)
 	}
 }
 
@@ -113,12 +123,21 @@ func TestEth2AssembleBlockWithAnotherBlocksTxs(t *testing.T) {
 	blockParams := beacon.PayloadAttributesV1{
 		Timestamp: blocks[8].Time() + 5,
 	}
-	execData, err := assembleBlock(api, blocks[8].Hash(), &blockParams)
-	if err != nil {
-		t.Fatalf("error producing block, err=%v", err)
+	// This test is a bit time-sensitive, the miner needs to pick up on the
+	// txs in the pool. Therefore, we retry once if it fails on the first attempt.
+	var testErr error
+	for retries := 2; retries > 0; retries-- {
+		if execData, err := assembleBlock(api, blocks[8].Hash(), &blockParams); err != nil {
+			t.Fatalf("error producing block, err=%v", err)
+		} else if have, want := len(execData.Transactions), blocks[9].Transactions().Len(); have != want {
+			testErr = fmt.Errorf("invalid number of transactions, have %d want %d", have, want)
+		} else {
+			testErr = nil
+			break
+		}
 	}
-	if len(execData.Transactions) != blocks[9].Transactions().Len() {
-		t.Fatalf("invalid number of transactions %d != 1", len(execData.Transactions))
+	if testErr != nil {
+		t.Fatal(testErr)
 	}
 }
 
@@ -163,6 +182,8 @@ func TestEth2PrepareAndGetPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error preparing payload, err=%v", err)
 	}
+	// give the payload some time to be built
+	time.Sleep(100 * time.Millisecond)
 	payloadID := computePayloadId(fcState.HeadBlockHash, &blockParams)
 	execData, err := api.GetPayloadV1(payloadID)
 	if err != nil {
@@ -476,10 +497,9 @@ func TestExchangeTransitionConfig(t *testing.T) {
 	genesis, preMergeBlocks := generatePreMergeChain(10)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
-	var (
-		api = NewConsensusAPI(ethservice)
-	)
+
 	// invalid ttd
+	api := NewConsensusAPI(ethservice)
 	config := beacon.TransitionConfigurationV1{
 		TerminalTotalDifficulty: (*hexutil.Big)(big.NewInt(0)),
 		TerminalBlockHash:       common.Hash{},
@@ -569,12 +589,12 @@ func TestNewPayloadOnInvalidChain(t *testing.T) {
 		if resp.PayloadStatus.Status != beacon.VALID {
 			t.Fatalf("error preparing payload, invalid status: %v", resp.PayloadStatus.Status)
 		}
+		// give the payload some time to be built
+		time.Sleep(100 * time.Millisecond)
 		payload, err := api.GetPayloadV1(*resp.PayloadID)
 		if err != nil {
 			t.Fatalf("can't get payload: %v", err)
 		}
-		// TODO(493456442, marius) this test can be flaky since we rely on a 100ms
-		// allowance for block generation internally.
 		if len(payload.Transactions) == 0 {
 			t.Fatalf("payload should not be empty")
 		}
@@ -601,11 +621,17 @@ func TestNewPayloadOnInvalidChain(t *testing.T) {
 }
 
 func assembleBlock(api *ConsensusAPI, parentHash common.Hash, params *beacon.PayloadAttributesV1) (*beacon.ExecutableDataV1, error) {
-	block, err := api.eth.Miner().GetSealingBlockSync(parentHash, params.Timestamp, params.SuggestedFeeRecipient, params.Random, false)
+	args := &miner.BuildPayloadArgs{
+		Parent:       parentHash,
+		Timestamp:    params.Timestamp,
+		FeeRecipient: params.SuggestedFeeRecipient,
+		Random:       params.Random,
+	}
+	payload, err := api.eth.Miner().BuildPayload(args)
 	if err != nil {
 		return nil, err
 	}
-	return beacon.BlockToExecutableData(block), nil
+	return payload.ResolveFull(), nil
 }
 
 func TestEmptyBlocks(t *testing.T) {
@@ -813,10 +839,8 @@ func TestInvalidBloom(t *testing.T) {
 
 func TestNewPayloadOnInvalidTerminalBlock(t *testing.T) {
 	genesis, preMergeBlocks := generatePreMergeChain(100)
-	fmt.Println(genesis.Config.TerminalTotalDifficulty)
 	genesis.Config.TerminalTotalDifficulty = preMergeBlocks[0].Difficulty() //.Sub(genesis.Config.TerminalTotalDifficulty, preMergeBlocks[len(preMergeBlocks)-1].Difficulty())
 
-	fmt.Println(genesis.Config.TerminalTotalDifficulty)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 
@@ -840,16 +864,17 @@ func TestNewPayloadOnInvalidTerminalBlock(t *testing.T) {
 	}
 
 	// Test parent already post TTD in NewPayload
-	params := beacon.PayloadAttributesV1{
-		Timestamp:             parent.Time() + 1,
-		Random:                crypto.Keccak256Hash([]byte{byte(1)}),
-		SuggestedFeeRecipient: parent.Coinbase(),
+	args := &miner.BuildPayloadArgs{
+		Parent:       parent.Hash(),
+		Timestamp:    parent.Time() + 1,
+		Random:       crypto.Keccak256Hash([]byte{byte(1)}),
+		FeeRecipient: parent.Coinbase(),
 	}
-	empty, err := api.eth.Miner().GetSealingBlockSync(parent.Hash(), params.Timestamp, params.SuggestedFeeRecipient, params.Random, true)
+	payload, err := api.eth.Miner().BuildPayload(args)
 	if err != nil {
 		t.Fatalf("error preparing payload, err=%v", err)
 	}
-	data := *beacon.BlockToExecutableData(empty)
+	data := *payload.Resolve()
 	resp2, err := api.NewPayloadV1(data)
 	if err != nil {
 		t.Fatalf("error sending NewPayload, err=%v", err)
