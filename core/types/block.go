@@ -130,7 +130,11 @@ var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
+	var baseFeeBits int
+	if h.BaseFee != nil {
+		baseFeeBits = h.BaseFee.BitLen()
+	}
+	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen()+baseFeeBits)/8)
 }
 
 // SanityCheck checks a few basic things -- these checks are way beyond what
@@ -204,7 +208,7 @@ func (tx *minimalTx) DecodeRLP(s *rlp.Stream) error {
 		var inner LegacyTx
 		err := s.Decode(&inner)
 		if err == nil {
-			(*Transaction)(tx).setDecoded(&inner, int(rlp.ListSize(size)))
+			(*Transaction)(tx).setDecoded(&inner, rlp.ListSize(size))
 		}
 		return err
 	case kind == rlp.String:
@@ -215,7 +219,7 @@ func (tx *minimalTx) DecodeRLP(s *rlp.Stream) error {
 		}
 		inner, err := (*Transaction)(tx).decodeTypedMinimal(b)
 		if err == nil {
-			(*Transaction)(tx).setDecoded(inner, len(b))
+			(*Transaction)(tx).setDecoded(inner, uint64(len(b)))
 		}
 		return err
 	default:
@@ -354,7 +358,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 		}
 	}
 	b.header, b.uncles, b.transactions = eb.Header, eb.Uncles, []*Transaction(*eb.Txs)
-	b.size.Store(common.StorageSize(rlp.ListSize(size)))
+	b.size.Store(rlp.ListSize(size))
 	return nil
 }
 
@@ -420,14 +424,14 @@ func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles} }
 
 // Size returns the true RLP encoded storage size of the block, either by encoding
 // and returning it, or returning a previously cached value.
-func (b *Block) Size() common.StorageSize {
+func (b *Block) Size() uint64 {
 	if size := b.size.Load(); size != nil {
-		return size.(common.StorageSize)
+		return size.(uint64)
 	}
 	c := writeCounter(0)
 	rlp.Encode(&c, b)
-	b.size.Store(common.StorageSize(c))
-	return common.StorageSize(c)
+	b.size.Store(uint64(c))
+	return uint64(c)
 }
 
 // SanityCheck can be used to prevent that unbounded fields are
@@ -436,7 +440,7 @@ func (b *Block) SanityCheck() error {
 	return b.header.SanityCheck()
 }
 
-type writeCounter common.StorageSize
+type writeCounter uint64
 
 func (c *writeCounter) Write(b []byte) (int, error) {
 	*c += writeCounter(len(b))
