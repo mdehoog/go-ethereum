@@ -31,20 +31,6 @@ func BenchmarkBlobToKzg(b *testing.B) {
 	}
 }
 
-func BenchmarkVerifyBlobsWithoutKZGProof(b *testing.B) {
-	var blobs [][]bls.Fr
-	var commitments []*bls.G1Point
-	for i := 0; i < 16; i++ {
-		blob := randomBlob()
-		blobs = append(blobs, blob)
-		commitments = append(commitments, kzg.BlobToKzg(blob))
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		kzg.VerifyBlobsLegacy(commitments, blobs)
-	}
-}
-
 func BenchmarkVerifyBlobs(b *testing.B) {
 	blobs := make([]types.Blob, params.MaxBlobsPerBlock)
 	var commitments []types.KZGCommitment
