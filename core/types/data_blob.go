@@ -606,7 +606,10 @@ func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]
 	if err != nil {
 		return nil, nil, err
 	}
-	aggregatePoly := kzg.MatrixLinComb(polys, powers)
+	aggregatePoly, err := bls.PolyLinComb(polys, powers)
+	if err != nil {
+		return nil, nil, err
+	}
 	return aggregatePoly, aggregateCommitmentG1, nil
 }
 

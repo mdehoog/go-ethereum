@@ -50,7 +50,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/peterh/liner v1.1.1-0.20190123174540-a2c9a5303de7
 	github.com/prometheus/tsdb v0.7.1
-	github.com/protolambda/go-kzg v0.0.0-20221025081131-f3a74d3b1d0c
+	github.com/protolambda/go-kzg v0.0.0-20221108193918-c6d0faa55038
 	github.com/protolambda/ztyp v0.2.1
 	github.com/rjeczalik/notify v0.9.1
 	github.com/rs/cors v1.7.0
