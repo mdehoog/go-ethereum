@@ -54,7 +54,7 @@ type header struct {
 	MixDigest       common.Hash       `json:"mixHash"`
 	Nonce           *types.BlockNonce `json:"nonce"`
 	BaseFee         *big.Int          `json:"baseFeePerGas" rlp:"optional"`
-	WithdrawalsHash *common.Hash      `json:"withdrawalsRoog" rlp:"optional"`
+	WithdrawalsHash *common.Hash      `json:"withdrawalsRoot" rlp:"optional"`
 	ExcessDataGas   *big.Int          `json:"excessDataGas"   rlp:"optional"`
 }
 
