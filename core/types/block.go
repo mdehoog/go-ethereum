@@ -20,6 +20,7 @@ package types
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -88,6 +89,9 @@ type Header struct {
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
 
+	// WithdrawalsHash was added by EIP-4895 and is ignored in legacy headers.
+	WithdrawalsHash *common.Hash `json:"withdrawalsRoot" rlp:"optional"`
+
 	// ExcessDataGas was added by EIP-4844 and is ignored in legacy headers.
 	ExcessDataGas *big.Int `json:"excessDataGas" rlp:"optional"`
 
@@ -116,6 +120,10 @@ func (h *Header) SetExcessDataGas(v *big.Int) {
 	h.ExcessDataGas = new(big.Int)
 	if v != nil {
 		h.ExcessDataGas.Set(v)
+	}
+	if h.WithdrawalsHash == nil {
+		// leaving this nil would result in a buggy encoding
+		h.WithdrawalsHash = &EmptyRootHash
 	}
 }
 
@@ -184,6 +192,7 @@ type Block struct {
 	header       *Header
 	uncles       []*Header
 	transactions Transactions
+	withdrawals  []*Withdrawal
 
 	// caches
 	hash atomic.Value
@@ -271,9 +280,10 @@ func (txs *extBlockTxs) EncodeRLP(w io.Writer) error {
 
 // "external" block encoding. used for eth protocol, etc.
 type extblock struct {
-	Header *Header
-	Txs    *extBlockTxs
-	Uncles []*Header
+	Header      *Header
+	Txs         *extBlockTxs
+	Uncles      []*Header
+	Withdrawals []*Withdrawal `rlp:"optional"`
 }
 
 // NewBlock creates a new block. The input data is copied,
@@ -315,6 +325,31 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	return b
 }
 
+// NewBlock2 creates a new block with withdrawals. The input data
+// is copied, changes to header and to the field values will not
+// affect the block.
+//
+// The values of TxHash, UncleHash, ReceiptHash and Bloom in header
+// are ignored and set to values derived from the given txs, uncles
+// and receipts.
+func NewBlock2(header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, withdrawals []*Withdrawal, hasher TrieHasher) *Block {
+	b := NewBlock(header, txs, uncles, receipts, hasher)
+	if withdrawals == nil {
+		return b
+	}
+
+	b.withdrawals = make([]*Withdrawal, len(withdrawals))
+	copy(b.withdrawals, withdrawals)
+
+	if len(withdrawals) == 0 {
+		b.header.WithdrawalsHash = &EmptyRootHash
+	} else {
+		h := DeriveSha(Withdrawals(withdrawals), hasher)
+		b.header.WithdrawalsHash = &h
+	}
+	return b
+}
+
 // NewBlockWithHeader creates a block with the given header data. The
 // header data is copied, changes to header and to the field values
 // will not affect the block.
@@ -342,6 +377,10 @@ func CopyHeader(h *Header) *Header {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
 	}
+	if h.WithdrawalsHash != nil {
+		cpy.WithdrawalsHash = new(common.Hash)
+		cpy.WithdrawalsHash.SetBytes(h.WithdrawalsHash.Bytes())
+	}
 	return &cpy
 }
 
@@ -357,17 +396,24 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 			return fmt.Errorf("transactions in blocks must not contain wrap-data, tx %d is bad", i)
 		}
 	}
-	b.header, b.uncles, b.transactions = eb.Header, eb.Uncles, []*Transaction(*eb.Txs)
+	b.header, b.uncles, b.transactions, b.withdrawals = eb.Header, eb.Uncles, []*Transaction(*eb.Txs), eb.Withdrawals
 	b.size.Store(rlp.ListSize(size))
 	return nil
 }
 
 // EncodeRLP serializes b into the Ethereum RLP block format.
 func (b *Block) EncodeRLP(w io.Writer) error {
+	if b.header.ExcessDataGas != nil && b.header.WithdrawalsHash == nil {
+		// This situation should not arise, but if it does (due to a bug) you'd silently produce an
+		// encoding that would fail to decode. ref:
+		// https://github.com/ethereum/go-ethereum/pull/26077
+		return errors.New("nil WithdrawalsHash in header with non-nil ExcessDataGas")
+	}
 	return rlp.Encode(w, extblock{
-		Header: b.header,
-		Txs:    (*extBlockTxs)(&b.transactions),
-		Uncles: b.uncles,
+		Header:      b.header,
+		Txs:         (*extBlockTxs)(&b.transactions),
+		Uncles:      b.uncles,
+		Withdrawals: b.withdrawals,
 	})
 }
 
@@ -408,6 +454,19 @@ func (b *Block) BaseFee() *big.Int {
 		return nil
 	}
 	return new(big.Int).Set(b.header.BaseFee)
+}
+
+func (b *Block) WithdrawalsHash() *common.Hash {
+	if b.header.WithdrawalsHash == nil {
+		return nil
+	}
+	var h common.Hash
+	h.SetBytes(b.header.WithdrawalsHash.Bytes())
+	return &h
+}
+
+func (b *Block) Withdrawals() Withdrawals {
+	return b.withdrawals
 }
 
 func (b *Block) ExcessDataGas() *big.Int {
@@ -463,6 +522,7 @@ func (b *Block) WithSeal(header *Header) *Block {
 		header:       &cpy,
 		transactions: b.transactions,
 		uncles:       b.uncles,
+		withdrawals:  b.withdrawals,
 	}
 }
 
@@ -477,6 +537,18 @@ func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 	for i := range uncles {
 		block.uncles[i] = CopyHeader(uncles[i])
 	}
+	return block
+}
+
+// WithBody2 returns a new block with the given transaction, uncle, and
+// withdrawal contents.
+func (b *Block) WithBody2(transactions []*Transaction, uncles []*Header, withdrawals []*Withdrawal) *Block {
+	block := b.WithBody(transactions, uncles)
+	if withdrawals == nil {
+		return block
+	}
+	block.withdrawals = make([]*Withdrawal, len(withdrawals))
+	copy(block.withdrawals, withdrawals)
 	return block
 }
 
