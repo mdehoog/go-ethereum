@@ -50,21 +50,6 @@ func BlobToKzg(eval []bls.Fr) *bls.G1Point {
 	return bls.LinCombG1(kzgSetupLagrange, eval)
 }
 
-// Verify a KZG proof
-func VerifyKzgProof(commitment *bls.G1Point, x *bls.Fr, y *bls.Fr, proof *bls.G1Point) bool {
-	// Verify the pairing equation
-	var xG2 bls.G2Point
-	bls.MulG2(&xG2, &bls.GenG2, x)
-	var sMinuxX bls.G2Point
-	bls.SubG2(&sMinuxX, &kzgSetupG2[1], &xG2)
-	var yG1 bls.G1Point
-	bls.MulG1(&yG1, &bls.GenG1, y)
-	var commitmentMinusY bls.G1Point
-	bls.SubG1(&commitmentMinusY, commitment, &yG1)
-
-	return bls.PairingsVerify(&commitmentMinusY, &bls.GenG2, proof, &sMinuxX)
-}
-
 type BlobsBatch struct {
 	sync.Mutex
 	init                bool

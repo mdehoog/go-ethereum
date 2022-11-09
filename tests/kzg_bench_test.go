@@ -76,7 +76,7 @@ func BenchmarkVerifyBlobs(b *testing.B) {
 	}
 }
 
-func BenchmarkVerifyKzgProof(b *testing.B) {
+func BenchmarkVerifyKZGProof(b *testing.B) {
 	// First let's do some go-kzg preparations to be able to convert polynomial between coefficient and evaluation form
 	fs := gokzg.NewFFTSettings(uint8(math.Log2(params.FieldElementsPerBlob)))
 
@@ -109,7 +109,7 @@ func BenchmarkVerifyKzgProof(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Verify kzg proof
-		if kzg.VerifyKzgProof(commitment, &xFr, &value, proof) != true {
+		if kzg.VerifyKZGProofFromPoints(commitment, &xFr, &value, proof) != true {
 			b.Fatal("failed proof verification")
 		}
 	}
