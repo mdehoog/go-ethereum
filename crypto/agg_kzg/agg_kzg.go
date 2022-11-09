@@ -135,6 +135,22 @@ func ComputeCommitments(blobs Blobs) (commitments []KZGCommitment, err error) {
 	return commitments, nil
 }
 
+func ComputeAggregateKZGProofAndCommitments(blobs Blobs) (KZGProof, []KZGCommitment, error) {
+	// Compute the commitments for each blob
+	commitments, err := ComputeCommitments(blobs)
+	if err != nil {
+		return KZGProof{}, nil, err
+	}
+
+	// Compute the KZGProof for all of the blobs
+	aggregatedProof, err := ComputeAggregateKZGProof(blobs, commitments)
+	if err != nil {
+		return KZGProof{}, nil, err
+	}
+
+	return aggregatedProof, commitments, nil
+}
+
 func ComputeAggregateKZGProof(blobs Blobs, commitments []KZGCommitment) (KZGProof, error) {
 	// TODO: here we should return the encoding for the neutral element not 0x00.000
 	var kzgProof KZGProof

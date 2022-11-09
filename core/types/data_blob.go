@@ -314,22 +314,15 @@ func (blobs Blobs) copy() Blobs {
 // Return KZG commitments, versioned hashes and the aggregated KZG proof that correspond to these blobs
 func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGCommitment, versionedHashes []common.Hash, aggregatedProof KZGProof, err error) {
 
-	// Compute the commitments for each blob
-	_commitments, err := agg_kzg.ComputeCommitments(toBlobs(blobs))
+	_aggregatedProof, _commitments, err := agg_kzg.ComputeAggregateKZGProofAndCommitments(toBlobs(blobs))
 	if err != nil {
 		return nil, nil, KZGProof{}, err
 	}
 	commitments = fromComms(_commitments)
+	aggregatedProof = KZGProof(_aggregatedProof)
 
 	// Compute the version hash from each commitment
 	versionedHashes = ComputeVersionHashes(commitments)
-
-	// Compute the KZGProof for all of the blobs
-	_aggregatedProof, err := agg_kzg.ComputeAggregateKZGProof(toBlobs(blobs), _commitments)
-	if err != nil {
-		return nil, nil, KZGProof{}, err
-	}
-	aggregatedProof = KZGProof(_aggregatedProof)
 
 	return commitments, versionedHashes, aggregatedProof, nil
 }
@@ -386,7 +379,7 @@ func (b *BlobTxWrapData) verifyVersionedHash(inner TxData) error {
 		return fmt.Errorf("expected equal amount but got %d kzgs and %d versioned hashes", a, b)
 	}
 	for i, h := range blobTx.Message.BlobVersionedHashes {
-		if computed := ComputeVersionedHash(b.BlobKzgs[i]); computed != h {
+		if computed := b.BlobKzgs[i].ComputeVersionedHash(); computed != h {
 			return fmt.Errorf("versioned hash %d supposedly %s but does not match computed %s", i, h, computed)
 		}
 	}
