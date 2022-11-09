@@ -9,7 +9,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/protolambda/go-kzg/bls"
@@ -63,10 +62,8 @@ func (p *KZGCommitment) Point() (*bls.G1Point, error) {
 	return bls.FromCompressedG1(p[:])
 }
 
-func (kzg KZGCommitment) ComputeVersionedHash() common.Hash {
-	h := crypto.Keccak256Hash(kzg[:])
-	h[0] = params.BlobCommitmentVersionKZG
-	return h
+func (c KZGCommitment) ComputeVersionedHash() common.Hash {
+	return kzg.KZGToVersionedHash(c)
 }
 
 // Compressed BLS12-381 G1 element
@@ -528,7 +525,7 @@ func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
 	if err != nil {
 		return fmt.Errorf("aggregate proof parse error: %v", err)
 	}
-	if !kzg.VerifyKzgProof(aggregateCommitmentG1, &z, &y, aggregateProofG1) {
+	if !kzg.VerifyKZGProofFromPoints(aggregateCommitmentG1, &z, &y, aggregateProofG1) {
 		return errors.New("failed to verify kzg")
 	}
 	return nil

@@ -22,8 +22,6 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/core/types"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -33,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/kzg"
 	"github.com/ethereum/go-ethereum/params"
 	big2 "github.com/holiman/big"
-	"github.com/protolambda/go-kzg/bls"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -1077,70 +1074,11 @@ func (c *bls12381MapG2) Run(input []byte) ([]byte, error) {
 // to check if a value is part of a blob at a specific point with a KZG proof.
 type pointEvaluation struct{}
 
-var (
-	errPointEvaluationInputLength           = errors.New("invalid input length")
-	errPointEvaluationInvalidVersionedHash  = errors.New("invalid versioned hash")
-	errPointEvaluationInvalidX              = errors.New("invalid evaluation point")
-	errPointEvaluationInvalidY              = errors.New("invalid expected output")
-	errPointEvaluationInvalidKzg            = errors.New("invalid data kzg")
-	errPointEvaluationInvalidProof          = errors.New("invalid proof")
-	errPointEvaluationMismatchVersionedHash = errors.New("mismatched versioned hash")
-	errPointEvaluationBadProof              = errors.New("bad proof")
-)
-
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *pointEvaluation) RequiredGas(input []byte) uint64 {
 	return params.PointEvaluationGas
 }
 
 func (c *pointEvaluation) Run(input []byte) ([]byte, error) {
-	if len(input) != 192 {
-		return nil, errPointEvaluationInputLength
-	}
-
-	var versionedHash common.Hash
-	copy(versionedHash[:], input[:32])
-	// XXX Should we version check the hash?
-	if versionedHash[0] != params.BlobCommitmentVersionKZG {
-		return nil, errPointEvaluationInvalidVersionedHash
-	}
-
-	var x bls.Fr
-	var data [32]byte
-	copy(data[:], input[32:64])
-	ok := bls.FrFrom32(&x, data)
-	if !ok {
-		return nil, errPointEvaluationInvalidX
-	}
-
-	var y bls.Fr
-	copy(data[:], input[64:96])
-	ok = bls.FrFrom32(&y, data)
-	if !ok {
-		return nil, errPointEvaluationInvalidY
-	}
-
-	var commitment types.KZGCommitment
-	copy(commitment[:], input[96:144])
-	if commitment.ComputeVersionedHash() != versionedHash {
-		return nil, errPointEvaluationMismatchVersionedHash
-	}
-
-	parsedCommitment, err := commitment.Point()
-	if err != nil {
-		return nil, errPointEvaluationInvalidKzg
-	}
-
-	var proof types.KZGCommitment
-	copy(proof[:], input[144:192])
-	parsedProof, err := proof.Point()
-	if err != nil {
-		return nil, errPointEvaluationInvalidProof
-	}
-
-	if !kzg.VerifyKzgProof(parsedCommitment, &x, &y, parsedProof) {
-		return nil, errPointEvaluationBadProof
-	}
-
-	return []byte{}, nil
+	return kzg.PointEvaluationPrecompile(input)
 }
