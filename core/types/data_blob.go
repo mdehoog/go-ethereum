@@ -63,7 +63,7 @@ func (p *KZGCommitment) Point() (*bls.G1Point, error) {
 }
 
 func (c KZGCommitment) ComputeVersionedHash() common.Hash {
-	return kzg.KZGToVersionedHash(c)
+	return common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
 }
 
 // Compressed BLS12-381 G1 element

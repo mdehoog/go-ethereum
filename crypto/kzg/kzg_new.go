@@ -10,9 +10,20 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
+// The custom types from EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#custom-types
+// We deviate from the spec slightly in that we use:
+//  *bls.Fr for BLSFieldElement
+//  *bls.G1Point for G1Point
+//  *bls.G2Point for G2Point
+type Blob [32 * params.FieldElementsPerBlob]byte
+type KZGCommitment [48]byte
+type KZGProof [48]byte
+type VersionedHash [32]byte
+
 // VerifyKZGProof implements verify_kzg_proof from the EIP-4844 consensus spec:
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#verify_kzg_proof
-func VerifyKZGProof(polynomialKZG [48]byte, z *bls.Fr, y *bls.Fr, kzgProof [48]byte) (bool, error) {
+func VerifyKZGProof(polynomialKZG KZGCommitment, z *bls.Fr, y *bls.Fr, kzgProof KZGProof) (bool, error) {
 	polynomialKZGG1, err := bls.FromCompressedG1(polynomialKZG[:])
 	if err != nil {
 		return false, fmt.Errorf("failed to decode polynomialKZG: %v", err)
@@ -39,10 +50,10 @@ func VerifyKZGProofFromPoints(polynomialKZG *bls.G1Point, z *bls.Fr, y *bls.Fr, 
 }
 
 // KZGToVersionedHash implements kzg_to_versioned_hash from EIP-4844
-func KZGToVersionedHash(kzg [48]byte) [32]byte {
+func KZGToVersionedHash(kzg KZGCommitment) VersionedHash {
 	h := crypto.Keccak256Hash(kzg[:])
 	h[0] = params.BlobCommitmentVersionKZG
-	return h
+	return VersionedHash([32]byte(h))
 }
 
 // PointEvaluationPrecompile implements point_evaluation_precompile from EIP-4844
@@ -75,7 +86,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	// input kzg point: next 48 bytes
 	var dataKZG [48]byte
 	copy(dataKZG[:], input[96:144])
-	if KZGToVersionedHash(dataKZG) != versionedHash {
+	if KZGToVersionedHash(KZGCommitment(dataKZG)) != VersionedHash(versionedHash) {
 		return nil, errors.New("mismatched versioned hash")
 	}
 
@@ -83,7 +94,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	var quotientKZG [48]byte
 	copy(quotientKZG[:], input[144:192])
 
-	ok, err := VerifyKZGProof(dataKZG, &xFr, &yFr, quotientKZG)
+	ok, err := VerifyKZGProof(KZGCommitment(dataKZG), &xFr, &yFr, KZGProof(quotientKZG))
 	if err != nil {
 		return nil, fmt.Errorf("verify_kzg_proof error: %v", err)
 	}
