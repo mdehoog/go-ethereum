@@ -24,6 +24,8 @@ var KzgSetupG1 []bls.G1Point
 
 // Convert polynomial in evaluation form to KZG commitment
 func BlobToKzg(eval []bls.Fr) *bls.G1Point {
+	// TODO: Note that this method panics when the
+	// TODO number of points does not match the number of scalars
 	return bls.LinCombG1(kzgSetupLagrange, eval)
 }
 
