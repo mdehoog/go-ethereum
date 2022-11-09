@@ -568,17 +568,6 @@ func (b *BlobTxWrapData) encodeTyped(w io.Writer, txdata TxData) error {
 	return EncodeSSZ(w, &wrapped)
 }
 
-func computePowers(r *bls.Fr, n int) []bls.Fr {
-	var currentPower bls.Fr
-	bls.AsFr(&currentPower, 1)
-	powers := make([]bls.Fr, n)
-	for i := range powers {
-		powers[i] = currentPower
-		bls.MulModFr(&currentPower, &currentPower, r)
-	}
-	return powers
-}
-
 func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]bls.Fr, *bls.G1Point, error) {
 	// create challenges
 	sum, err := sszHash(&BlobsAndCommitments{blobs, commitments})
@@ -588,7 +577,7 @@ func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]
 	var r bls.Fr
 	hashToFr(&r, sum)
 
-	powers := computePowers(&r, len(blobs))
+	powers := kzg.ComputePowers(&r, len(blobs))
 
 	commitmentsG1 := make([]bls.G1Point, len(commitments))
 	for i := 0; i < len(commitmentsG1); i++ {

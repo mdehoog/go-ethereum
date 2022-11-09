@@ -103,3 +103,16 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	}
 	return []byte{}, nil
 }
+
+// ComputePowers implements compute_powers from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#compute_powers
+func ComputePowers(r *bls.Fr, n int) []bls.Fr {
+	var currentPower bls.Fr
+	bls.AsFr(&currentPower, 1)
+	powers := make([]bls.Fr, n)
+	for i := range powers {
+		powers[i] = currentPower
+		bls.MulModFr(&currentPower, &currentPower, r)
+	}
+	return powers
+}
