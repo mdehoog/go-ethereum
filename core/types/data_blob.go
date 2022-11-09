@@ -160,6 +160,15 @@ func (blob *Blob) Deserialize(dr *codec.DecodingReader) error {
 	return nil
 }
 
+func (_blob Blob) ComputeCommitment() (KZGCommitment, error) {
+	blob := agg_kzg.Blob(_blob)
+	_comm, err := agg_kzg.ComputeCommitment(&blob)
+	if err != nil {
+		return KZGCommitment{}, err
+	}
+	return KZGCommitment(_comm), nil
+}
+
 func (blob *Blob) Serialize(w *codec.EncodingWriter) error {
 	for i := range blob {
 		if err := w.Write(blob[i][:]); err != nil {
@@ -309,6 +318,16 @@ func (blobs Blobs) copy() Blobs {
 	cpy := make(Blobs, len(blobs))
 	copy(cpy, blobs) // each blob element is an array and gets deep-copied
 	return cpy
+}
+
+func (blobs Blobs) ComputeCommitments() ([]KZGCommitment, error) {
+	_commitments, err := agg_kzg.ComputeCommitments(toBlobs(blobs))
+	if err != nil {
+		return nil, err
+	}
+	commitments := fromComms(_commitments)
+
+	return commitments, nil
 }
 
 // Return KZG commitments, versioned hashes and the aggregated KZG proof that correspond to these blobs
