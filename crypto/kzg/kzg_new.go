@@ -16,7 +16,7 @@ import (
 //  *bls.Fr for BLSFieldElement
 //  *bls.G1Point for G1Point
 //  *bls.G2Point for G2Point
-type Blob [32 * params.FieldElementsPerBlob]byte
+type Blob []bls.Fr
 type KZGCommitment [48]byte
 type KZGProof [48]byte
 type VersionedHash [32]byte
@@ -115,4 +115,13 @@ func ComputePowers(r *bls.Fr, n int) []bls.Fr {
 		bls.MulModFr(&currentPower, &currentPower, r)
 	}
 	return powers
+}
+
+// BlobToKZGCommitment implements blob_to_kzg_commitment from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#blob_to_kzg_commitment
+func BlobToKZGCommitment(eval Blob) KZGCommitment {
+	g1 := bls.LinCombG1(kzgSetupLagrange, []bls.Fr(eval))
+	var out KZGCommitment
+	copy(out[:], bls.ToCompressedG1(g1))
+	return out
 }

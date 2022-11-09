@@ -223,7 +223,7 @@ func TestPointEvaluationTestVector(t *testing.T) {
 	}
 
 	// Create a commitment
-	commitment := kzg.BlobToKzg(evalPoly)
+	commitment := kzg.BlobToKZGCommitment(evalPoly)
 
 	// Create proof for testing
 	x := uint64(0x42)
@@ -241,9 +241,7 @@ func TestPointEvaluationTestVector(t *testing.T) {
 	//	panic("failed proof verification")
 	//}
 
-	var commitmentBytes types.KZGCommitment
-	copy(commitmentBytes[:], bls.ToCompressedG1(commitment))
-
+	commitmentBytes := types.KZGCommitment(commitment)
 	versionedHash := commitmentBytes.ComputeVersionedHash()
 
 	proofBytes := bls.ToCompressedG1(proof)

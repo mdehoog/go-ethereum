@@ -172,11 +172,7 @@ func (blob *Blob) ComputeCommitment() (commitment KZGCommitment, ok bool) {
 			return KZGCommitment{}, false
 		}
 	}
-	// data is presented in eval form
-	commitmentG1 := kzg.BlobToKzg(frs)
-	var out KZGCommitment
-	copy(out[:], bls.ToCompressedG1(commitmentG1))
-	return out, true
+	return KZGCommitment(kzg.BlobToKZGCommitment(kzg.Blob(frs))), true
 }
 
 func (blob *Blob) MarshalText() ([]byte, error) {
