@@ -314,7 +314,7 @@ func (blobs Blobs) copy() Blobs {
 // Return KZG commitments, versioned hashes and the aggregated KZG proof that correspond to these blobs
 func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGCommitment, versionedHashes []common.Hash, aggregatedProof KZGProof, err error) {
 
-	_aggregatedProof, _commitments, err := agg_kzg.ComputeAggregateKZGProofAndCommitments(toBlobs(blobs))
+	_aggregatedProof, _commitments, err := agg_kzg.ComputeCommitmentsAndAggregatedProof(toBlobs(blobs))
 	if err != nil {
 		return nil, nil, KZGProof{}, err
 	}

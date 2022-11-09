@@ -135,7 +135,7 @@ func ComputeCommitments(blobs Blobs) (commitments []KZGCommitment, err error) {
 	return commitments, nil
 }
 
-func ComputeAggregateKZGProofAndCommitments(blobs Blobs) (KZGProof, []KZGCommitment, error) {
+func ComputeCommitmentsAndAggregatedProof(blobs Blobs) (KZGProof, []KZGCommitment, error) {
 	// Compute the commitments for each blob
 	commitments, err := ComputeCommitments(blobs)
 	if err != nil {
