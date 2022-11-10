@@ -3,6 +3,7 @@ package kzg
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/protolambda/go-kzg/bls"
 
@@ -123,5 +124,19 @@ func BlobToKZGCommitment(eval Blob) KZGCommitment {
 	g1 := bls.LinCombG1(kzgSetupLagrange, []bls.Fr(eval))
 	var out KZGCommitment
 	copy(out[:], bls.ToCompressedG1(g1))
+	return out
+}
+
+// BytesToBLSField implements bytes_to_bls_field from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#bytes_to_bls_field
+func BytesToBLSField(h [32]byte) *bls.Fr {
+	// re-interpret as little-endian
+	var b [32]byte = h
+	for i := 0; i < 16; i++ {
+		b[31-i], b[i] = b[i], b[31-i]
+	}
+	zB := new(big.Int).Mod(new(big.Int).SetBytes(b[:]), BLSModulus)
+	out := new(bls.Fr)
+	BigToFr(out, zB)
 	return out
 }

@@ -3,10 +3,8 @@ package kzg
 import (
 	"encoding/json"
 	"errors"
-	//"fmt"
 	"math/big"
 	"math/bits"
-	//"sync"
 
 	"github.com/ethereum/go-ethereum/params"
 

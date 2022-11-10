@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -328,13 +327,12 @@ func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGComm
 		if err != nil {
 			return nil, nil, KZGProof{}, err
 		}
-		var z bls.Fr
-		hashToFr(&z, sum)
+		z := kzg.BytesToBLSField(sum)
 
 		var y bls.Fr
-		kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], &z)
+		kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], z)
 
-		aggProofG1, err := kzg.ComputeProof(aggregatePoly, &z)
+		aggProofG1, err := kzg.ComputeProof(aggregatePoly, z)
 		if err != nil {
 			return nil, nil, KZGProof{}, err
 		}
@@ -465,17 +463,16 @@ func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
 	if err != nil {
 		return err
 	}
-	var z bls.Fr
-	hashToFr(&z, sum)
+	z := kzg.BytesToBLSField(sum)
 
 	var y bls.Fr
-	kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], &z)
+	kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], z)
 
 	aggregateProofG1, err := bls.FromCompressedG1(b.KzgAggregatedProof[:])
 	if err != nil {
 		return fmt.Errorf("aggregate proof parse error: %v", err)
 	}
-	if !kzg.VerifyKZGProofFromPoints(aggregateCommitmentG1, &z, &y, aggregateProofG1) {
+	if !kzg.VerifyKZGProofFromPoints(aggregateCommitmentG1, z, &y, aggregateProofG1) {
 		return errors.New("failed to verify kzg")
 	}
 	return nil
@@ -524,10 +521,9 @@ func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]
 	if err != nil {
 		return nil, nil, err
 	}
-	var r bls.Fr
-	hashToFr(&r, sum)
+	r := kzg.BytesToBLSField(sum)
 
-	powers := kzg.ComputePowers(&r, len(blobs))
+	powers := kzg.ComputePowers(r, len(blobs))
 
 	commitmentsG1 := make([]bls.G1Point, len(commitments))
 	for i := 0; i < len(commitmentsG1); i++ {
@@ -547,14 +543,4 @@ func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]
 		return nil, nil, err
 	}
 	return aggregatePoly, aggregateCommitmentG1, nil
-}
-
-func hashToFr(out *bls.Fr, h [32]byte) {
-	// re-interpret as little-endian
-	var b [32]byte = h
-	for i := 0; i < 16; i++ {
-		b[31-i], b[i] = b[i], b[31-i]
-	}
-	zB := new(big.Int).Mod(new(big.Int).SetBytes(b[:]), kzg.BLSModulus)
-	_ = kzg.BigToFr(out, zB)
 }
