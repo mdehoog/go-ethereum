@@ -15,8 +15,8 @@ import (
 	"github.com/protolambda/ztyp/view"
 )
 
-func randomBlob() []bls.Fr {
-	blob := make([]bls.Fr, params.FieldElementsPerBlob)
+func randomBlob() kzg.Blob {
+	blob := make(kzg.Blob, params.FieldElementsPerBlob)
 	for i := 0; i < len(blob); i++ {
 		blob[i] = *bls.RandomFr()
 	}
@@ -40,12 +40,14 @@ func BenchmarkVerifyBlobs(b *testing.B) {
 		for j := range tmp {
 			blobs[i][j] = bls.FrTo32(&tmp[j])
 		}
-		c, ok := blobs[i].ComputeCommitment()
+		frs, ok := blobs[i].ToKZGBlob()
 		if !ok {
 			b.Fatal("Could not compute commitment")
 		}
+		c := types.KZGCommitment(kzg.BlobToKZGCommitment(frs))
 		commitments = append(commitments, c)
-		hashes = append(hashes, c.ComputeVersionedHash())
+		h := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
+		hashes = append(hashes, h)
 	}
 	txData := &types.SignedBlobTx{
 		Message: types.BlobTxMessage{
@@ -133,12 +135,10 @@ func BenchmarkVerifyMultiple(b *testing.B) {
 						blobElements[j] = bls.FrTo32(&blob[j])
 					}
 					blobs = append(blobs, blobElements)
-					c, ok := blobElements.ComputeCommitment()
-					if !ok {
-						b.Fatal("Could not compute commitment")
-					}
+					c := types.KZGCommitment(kzg.BlobToKZGCommitment(blob))
 					commitments = append(commitments, c)
-					hashes = append(hashes, c.ComputeVersionedHash())
+					h := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
+					hashes = append(hashes, h)
 				}
 				blobsSet = append(blobsSet, blobs)
 				commitmentsSet = append(commitmentsSet, commitments)

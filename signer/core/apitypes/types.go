@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/kzg"
 )
 
 var typedDataReferenceTypeRegexp = regexp.MustCompile(`^[A-Z](\w*)(\[\])?$`)
@@ -149,12 +150,13 @@ func (args *SendTxArgs) ToTransaction() *types.Transaction {
 		msg.AccessList = types.AccessListView(al)
 		wrapData := types.BlobTxWrapData{}
 		for _, bl := range args.Blobs {
-			commitment, ok := bl.ComputeCommitment()
+			frs, ok := bl.ToKZGBlob()
 			if !ok {
 				// invalid BLS blob data (e.g. element not within field element range)
 				continue // can't error, so ignore the malformed blob
 			}
-			versionedHash := commitment.ComputeVersionedHash()
+			commitment := types.KZGCommitment(kzg.BlobToKZGCommitment(frs))
+			versionedHash := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(commitment)))
 			msg.BlobVersionedHashes = append(msg.BlobVersionedHashes, versionedHash)
 			wrapData.BlobKzgs = append(wrapData.BlobKzgs, commitment)
 			wrapData.Blobs = append(wrapData.Blobs, bl)

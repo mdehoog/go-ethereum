@@ -158,11 +158,13 @@ func TestVerifyBlobs(t *testing.T) {
 	}
 
 	// Compute KZG commitments for both of the blobs above
-	kzg1, ok1 := blob1.ComputeCommitment()
-	kzg2, ok2 := blob2.ComputeCommitment()
+	frs1, ok1 := blob1.ToKZGBlob()
+	frs2, ok2 := blob2.ToKZGBlob()
 	if ok1 == false || ok2 == false {
-		panic("failed to compute commitments")
+		panic("failed to convert blobs")
 	}
+	kzg1 := types.KZGCommitment(kzg.BlobToKZGCommitment(frs1))
+	kzg2 := types.KZGCommitment(kzg.BlobToKZGCommitment(frs2))
 
 	// Create the dummy object with all that data we prepared
 	blobData := types.BlobTxWrapData{
