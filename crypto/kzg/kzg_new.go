@@ -1,22 +1,28 @@
 package kzg
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
 
 	"github.com/protolambda/go-kzg/bls"
+	"github.com/protolambda/ztyp/codec"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 )
 
+const (
+	FIAT_SHAMIR_PROTOCOL_DOMAIN = "FSBLOBVERIFY_V1_"
+)
+
 // The custom types from EIP-4844 consensus spec:
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#custom-types
 // We deviate from the spec slightly in that we use:
-//  *bls.Fr for BLSFieldElement
-//  *bls.G1Point for G1Point
-//  *bls.G2Point for G2Point
+//  bls.Fr for BLSFieldElement
+//  bls.G1Point for G1Point
+//  bls.G2Point for G2Point
 type Blob []bls.Fr
 type KZGCommitment [48]byte
 type KZGProof [48]byte
@@ -48,6 +54,18 @@ func VerifyKZGProofFromPoints(polynomialKZG *bls.G1Point, z *bls.Fr, y *bls.Fr, 
 	bls.SubG1(&pMinusY, polynomialKZG, &yG1)
 
 	return bls.PairingsVerify(&pMinusY, &bls.GenG2, kzgProof, &xMinusZ)
+}
+
+// VerifyAggregateKZGProof implements verify_aggregate_kzg_proof from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#verify_aggregate_kzg_proof
+func VerifyAggregateKZGProof(blobs [][]bls.Fr, expectedKZGCommitments []KZGCommitment, kzgAggregatedProof KZGProof) (bool, error) {
+	aggregatedPoly, aggregatedPolyCommitment, evaluationChallenge, err :=
+		ComputeAggregatedPolyAndCommitment(blobs, expectedKZGCommitments)
+	if err != nil {
+		return false, err
+	}
+	y := EvaluatePolynomialInEvaluationForm(aggregatedPoly, evaluationChallenge)
+	return VerifyKZGProof(aggregatedPolyCommitment, evaluationChallenge, y, kzgAggregatedProof)
 }
 
 // KZGToVersionedHash implements kzg_to_versioned_hash from EIP-4844
@@ -139,4 +157,119 @@ func BytesToBLSField(h [32]byte) *bls.Fr {
 	out := new(bls.Fr)
 	BigToFr(out, zB)
 	return out
+}
+
+// ComputeAggregatedPolyAndcommitment implements compute_aggregated_poly_and_commitment from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#compute_aggregated_poly_and_commitment
+func ComputeAggregatedPolyAndCommitment(blobs [][]bls.Fr, commitments []KZGCommitment) ([]bls.Fr, KZGCommitment, *bls.Fr, error) {
+	// create challenges
+	r, err := HashToBLSField(blobs, commitments)
+	powers := ComputePowers(r, len(blobs))
+	if len(powers) == 0 {
+		return nil, KZGCommitment{}, nil, errors.New("powers can't be 0 length")
+	}
+
+	var evaluationChallenge bls.Fr
+	bls.MulModFr(&evaluationChallenge, r, &powers[len(powers)-1])
+
+	aggregatedPoly, err := bls.PolyLinComb(blobs, powers)
+	if err != nil {
+		return nil, KZGCommitment{}, nil, err
+	}
+
+	commitmentsG1 := make([]bls.G1Point, len(commitments))
+	for i := 0; i < len(commitmentsG1); i++ {
+		p, err := bls.FromCompressedG1(commitments[i][:])
+		if err != nil {
+			return nil, KZGCommitment{}, nil, err
+		}
+		bls.CopyG1(&commitmentsG1[i], p)
+	}
+	aggregatedCommitmentG1 := bls.LinCombG1(commitmentsG1, powers)
+	var aggregatedCommitment KZGCommitment
+	copy(aggregatedCommitment[:], bls.ToCompressedG1(aggregatedCommitmentG1))
+
+	return aggregatedPoly, aggregatedCommitment, &evaluationChallenge, nil
+}
+
+// ComputeAggregateKZGProof implements compute_aggregate_kzg_proof from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#compute_aggregate_kzg_proof
+func ComputeAggregateKZGProof(blobs [][]bls.Fr) (KZGProof, error) {
+	commitments := make([]KZGCommitment, len(blobs))
+	for i, b := range blobs {
+		commitments[i] = BlobToKZGCommitment(Blob(b))
+	}
+	aggregatedPoly, _, evaluationChallenge, err := ComputeAggregatedPolyAndCommitment(blobs, commitments)
+	if err != nil {
+		return KZGProof{}, err
+	}
+	return ComputeKZGProof(aggregatedPoly, evaluationChallenge)
+}
+
+// ComputeAggregateKZGProof implements compute_kzg_proof from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#compute_kzg_proof
+func ComputeKZGProof(polynomial []bls.Fr, z *bls.Fr) (KZGProof, error) {
+	y := EvaluatePolynomialInEvaluationForm(polynomial, z)
+	polynomialShifted := make([]bls.Fr, len(polynomial))
+	for i := range polynomial {
+		bls.SubModFr(&polynomialShifted[i], &polynomial[i], y)
+	}
+	denominatorPoly := make([]bls.Fr, len(polynomial))
+	if len(polynomial) != len(Domain) {
+		return KZGProof{}, errors.New("polynomial has invalid length")
+	}
+	for i := range polynomial {
+		if bls.EqualFr(&DomainFr[i], z) {
+			return KZGProof{}, errors.New("invalid z challenge")
+		}
+		bls.SubModFr(&denominatorPoly[i], &DomainFr[i], z)
+	}
+	quotientPolynomial := make([]bls.Fr, len(polynomial))
+	for i := range polynomial {
+		bls.DivModFr(&quotientPolynomial[i], &polynomialShifted[i], &denominatorPoly[i])
+	}
+	rG1 := bls.LinCombG1(kzgSetupLagrange, quotientPolynomial)
+	var proof KZGProof
+	copy(proof[:], bls.ToCompressedG1(rG1))
+	return proof, nil
+}
+
+// EvaluatePolynomialInEvaluationForm implements evaluate_polynomial_in_evaluation_form from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#evaluate_polynomial_in_evaluation_form
+func EvaluatePolynomialInEvaluationForm(poly []bls.Fr, x *bls.Fr) *bls.Fr {
+	var result bls.Fr
+	bls.EvaluatePolyInEvaluationForm(&result, poly, x, DomainFr, 0)
+	return &result
+}
+
+// HashToBLSField implements hash_to_bls_field from the EIP-4844 consensus specs:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#hash_to_bls_field
+func HashToBLSField(polys [][]bls.Fr, comms []KZGCommitment) (*bls.Fr, error) {
+	sha := sha256.New()
+	w := codec.NewEncodingWriter(sha)
+	if err := w.Write([]byte(FIAT_SHAMIR_PROTOCOL_DOMAIN)); err != nil {
+		return nil, err
+	}
+	if err := w.WriteUint64(params.FieldElementsPerBlob); err != nil {
+		return nil, err
+	}
+	if err := w.WriteUint64(uint64(len(polys))); err != nil {
+		return nil, err
+	}
+	for _, poly := range polys {
+		for _, fe := range poly {
+			b32 := bls.FrTo32(&fe)
+			if err := w.Write(b32[:]); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, commitment := range comms {
+		if err := w.Write(commitment[:]); err != nil {
+			return nil, err
+		}
+	}
+	var hash [32]byte
+	copy(hash[:], sha.Sum(nil))
+	return BytesToBLSField(hash), nil
 }

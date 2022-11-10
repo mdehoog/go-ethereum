@@ -32,11 +32,6 @@ func initDomain() {
 	}
 }
 
-// EvaluatePolyInEvaluationForm evaluates the polynomial using the barycentric formula
-func EvaluatePolyInEvaluationForm(yFr *bls.Fr, poly []bls.Fr, x *bls.Fr) {
-	bls.EvaluatePolyInEvaluationForm(yFr, poly, x, DomainFr, 0)
-}
-
 func frToBig(b *big.Int, val *bls.Fr) {
 	//b.SetBytes((*kilicbls.Fr)(val).RedToBytes())
 	// silly double conversion

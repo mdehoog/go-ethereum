@@ -209,6 +209,15 @@ func (blob *Blob) UnmarshalText(text []byte) error {
 
 type BlobKzgs []KZGCommitment
 
+func (li BlobKzgs) toKZGCommitmentSequence() []kzg.KZGCommitment {
+	l := len(li)
+	kzgs := make([]kzg.KZGCommitment, l)
+	for i := 0; i < l; i++ {
+		kzgs[i] = kzg.KZGCommitment(li[i])
+	}
+	return kzgs
+}
+
 func (li *BlobKzgs) Deserialize(dr *codec.DecodingReader) error {
 	return dr.List(func() codec.Deserializable {
 		i := len(*li)
@@ -227,7 +236,7 @@ func (li BlobKzgs) ByteLength() uint64 {
 	return uint64(len(li)) * 48
 }
 
-func (li *BlobKzgs) FixedLength() uint64 {
+func (li BlobKzgs) FixedLength() uint64 {
 	return 0
 }
 
@@ -305,38 +314,24 @@ func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGComm
 		if !ok {
 			return nil, nil, KZGProof{}, errors.New("invalid blob for commitment")
 		}
-		commitments[i] = KZGCommitment(kzg.BlobToKZGCommitment(frs))
-		versionedHashes[i] = common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(commitments[i])))
+		c := kzg.BlobToKZGCommitment(frs)
+		commitments[i] = KZGCommitment(c)
+		versionedHashes[i] = common.Hash(kzg.KZGToVersionedHash(c))
 	}
 
 	var kzgProof KZGProof
 	if len(blobs) != 0 {
-		aggregatePoly, aggregateCommitmentG1, err := computeAggregateKzgCommitment(blobs, commitments)
+		// TODO: Execution layer shouldn't be responsible for computing the proof, it should
+		// be done in the CL.
+		polys, ok := blobs.toKZGBlobSequence()
+		if !ok {
+			return nil, nil, KZGProof{}, err
+		}
+		proof, err := kzg.ComputeAggregateKZGProof(polys)
 		if err != nil {
 			return nil, nil, KZGProof{}, err
 		}
-
-		var aggregateCommitment KZGCommitment
-		copy(aggregateCommitment[:], bls.ToCompressedG1(aggregateCommitmentG1))
-
-		var aggregateBlob Blob
-		for i := range aggregatePoly {
-			aggregateBlob[i] = bls.FrTo32(&aggregatePoly[i])
-		}
-		sum, err := sszHash(&PolynomialAndCommitment{aggregateBlob, aggregateCommitment})
-		if err != nil {
-			return nil, nil, KZGProof{}, err
-		}
-		z := kzg.BytesToBLSField(sum)
-
-		var y bls.Fr
-		kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], z)
-
-		aggProofG1, err := kzg.ComputeProof(aggregatePoly, z)
-		if err != nil {
-			return nil, nil, KZGProof{}, err
-		}
-		copy(kzgProof[:], bls.ToCompressedG1(aggProofG1))
+		kzgProof = KZGProof(proof)
 	}
 
 	return commitments, versionedHashes, kzgProof, nil
@@ -448,31 +443,16 @@ func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
 	if err := b.verifyVersionedHash(inner); err != nil {
 		return err
 	}
-
-	aggregatePoly, aggregateCommitmentG1, err := computeAggregateKzgCommitment(b.Blobs, b.BlobKzgs)
+	polys, ok := b.Blobs.toKZGBlobSequence()
+	if !ok {
+		return errors.New("could not convert blobs to blob sequence")
+	}
+	kzgs := b.BlobKzgs.toKZGCommitmentSequence()
+	ok, err := kzg.VerifyAggregateKZGProof(polys, kzgs, kzg.KZGProof(b.KzgAggregatedProof))
 	if err != nil {
-		return fmt.Errorf("failed to compute aggregate commitment: %v", err)
+		return fmt.Errorf("error during proof verification: %v", err)
 	}
-	var aggregateBlob Blob
-	for i := range aggregatePoly {
-		aggregateBlob[i] = bls.FrTo32(&aggregatePoly[i])
-	}
-	var aggregateCommitment KZGCommitment
-	copy(aggregateCommitment[:], bls.ToCompressedG1(aggregateCommitmentG1))
-	sum, err := sszHash(&PolynomialAndCommitment{aggregateBlob, aggregateCommitment})
-	if err != nil {
-		return err
-	}
-	z := kzg.BytesToBLSField(sum)
-
-	var y bls.Fr
-	kzg.EvaluatePolyInEvaluationForm(&y, aggregatePoly[:], z)
-
-	aggregateProofG1, err := bls.FromCompressedG1(b.KzgAggregatedProof[:])
-	if err != nil {
-		return fmt.Errorf("aggregate proof parse error: %v", err)
-	}
-	if !kzg.VerifyKZGProofFromPoints(aggregateCommitmentG1, z, &y, aggregateProofG1) {
+	if !ok {
 		return errors.New("failed to verify kzg")
 	}
 	return nil
@@ -513,34 +493,4 @@ func (b *BlobTxWrapData) encodeTyped(w io.Writer, txdata TxData) error {
 		KzgAggregatedProof: b.KzgAggregatedProof,
 	}
 	return EncodeSSZ(w, &wrapped)
-}
-
-func computeAggregateKzgCommitment(blobs Blobs, commitments []KZGCommitment) ([]bls.Fr, *bls.G1Point, error) {
-	// create challenges
-	sum, err := sszHash(&BlobsAndCommitments{blobs, commitments})
-	if err != nil {
-		return nil, nil, err
-	}
-	r := kzg.BytesToBLSField(sum)
-
-	powers := kzg.ComputePowers(r, len(blobs))
-
-	commitmentsG1 := make([]bls.G1Point, len(commitments))
-	for i := 0; i < len(commitmentsG1); i++ {
-		p, _ := bls.FromCompressedG1(commitments[i][:])
-		bls.CopyG1(&commitmentsG1[i], p)
-	}
-	aggregateCommitmentG1 := bls.LinCombG1(commitmentsG1, powers)
-	var aggregateCommitment KZGCommitment
-	copy(aggregateCommitment[:], bls.ToCompressedG1(aggregateCommitmentG1))
-
-	polys, ok := blobs.toKZGBlobSequence()
-	if !ok {
-		return nil, nil, err
-	}
-	aggregatePoly, err := bls.PolyLinComb(polys, powers)
-	if err != nil {
-		return nil, nil, err
-	}
-	return aggregatePoly, aggregateCommitmentG1, nil
 }
