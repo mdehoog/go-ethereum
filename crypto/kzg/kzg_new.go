@@ -3,6 +3,7 @@ package kzg
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/protolambda/go-kzg/bls"
 
@@ -10,9 +11,20 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
+// The custom types from EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#custom-types
+// We deviate from the spec slightly in that we use:
+//  *bls.Fr for BLSFieldElement
+//  *bls.G1Point for G1Point
+//  *bls.G2Point for G2Point
+type Blob []bls.Fr
+type KZGCommitment [48]byte
+type KZGProof [48]byte
+type VersionedHash [32]byte
+
 // VerifyKZGProof implements verify_kzg_proof from the EIP-4844 consensus spec:
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#verify_kzg_proof
-func VerifyKZGProof(polynomialKZG [48]byte, z *bls.Fr, y *bls.Fr, kzgProof [48]byte) (bool, error) {
+func VerifyKZGProof(polynomialKZG KZGCommitment, z *bls.Fr, y *bls.Fr, kzgProof KZGProof) (bool, error) {
 	polynomialKZGG1, err := bls.FromCompressedG1(polynomialKZG[:])
 	if err != nil {
 		return false, fmt.Errorf("failed to decode polynomialKZG: %v", err)
@@ -39,10 +51,10 @@ func VerifyKZGProofFromPoints(polynomialKZG *bls.G1Point, z *bls.Fr, y *bls.Fr, 
 }
 
 // KZGToVersionedHash implements kzg_to_versioned_hash from EIP-4844
-func KZGToVersionedHash(kzg [48]byte) [32]byte {
+func KZGToVersionedHash(kzg KZGCommitment) VersionedHash {
 	h := crypto.Keccak256Hash(kzg[:])
 	h[0] = params.BlobCommitmentVersionKZG
-	return h
+	return VersionedHash([32]byte(h))
 }
 
 // PointEvaluationPrecompile implements point_evaluation_precompile from EIP-4844
@@ -75,7 +87,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	// input kzg point: next 48 bytes
 	var dataKZG [48]byte
 	copy(dataKZG[:], input[96:144])
-	if KZGToVersionedHash(dataKZG) != versionedHash {
+	if KZGToVersionedHash(KZGCommitment(dataKZG)) != VersionedHash(versionedHash) {
 		return nil, errors.New("mismatched versioned hash")
 	}
 
@@ -83,7 +95,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	var quotientKZG [48]byte
 	copy(quotientKZG[:], input[144:192])
 
-	ok, err := VerifyKZGProof(dataKZG, &xFr, &yFr, quotientKZG)
+	ok, err := VerifyKZGProof(KZGCommitment(dataKZG), &xFr, &yFr, KZGProof(quotientKZG))
 	if err != nil {
 		return nil, fmt.Errorf("verify_kzg_proof error: %v", err)
 	}
@@ -91,4 +103,40 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 		return nil, errors.New("failed to verify kzg proof")
 	}
 	return []byte{}, nil
+}
+
+// ComputePowers implements compute_powers from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#compute_powers
+func ComputePowers(r *bls.Fr, n int) []bls.Fr {
+	var currentPower bls.Fr
+	bls.AsFr(&currentPower, 1)
+	powers := make([]bls.Fr, n)
+	for i := range powers {
+		powers[i] = currentPower
+		bls.MulModFr(&currentPower, &currentPower, r)
+	}
+	return powers
+}
+
+// BlobToKZGCommitment implements blob_to_kzg_commitment from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#blob_to_kzg_commitment
+func BlobToKZGCommitment(eval Blob) KZGCommitment {
+	g1 := bls.LinCombG1(kzgSetupLagrange, []bls.Fr(eval))
+	var out KZGCommitment
+	copy(out[:], bls.ToCompressedG1(g1))
+	return out
+}
+
+// BytesToBLSField implements bytes_to_bls_field from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#bytes_to_bls_field
+func BytesToBLSField(h [32]byte) *bls.Fr {
+	// re-interpret as little-endian
+	var b [32]byte = h
+	for i := 0; i < 16; i++ {
+		b[31-i], b[i] = b[i], b[31-i]
+	}
+	zB := new(big.Int).Mod(new(big.Int).SetBytes(b[:]), BLSModulus)
+	out := new(bls.Fr)
+	BigToFr(out, zB)
+	return out
 }

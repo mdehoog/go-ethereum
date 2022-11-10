@@ -15,8 +15,8 @@ import (
 	"github.com/protolambda/ztyp/view"
 )
 
-func randomBlob() []bls.Fr {
-	blob := make([]bls.Fr, params.FieldElementsPerBlob)
+func randomBlob() kzg.Blob {
+	blob := make(kzg.Blob, params.FieldElementsPerBlob)
 	for i := 0; i < len(blob); i++ {
 		blob[i] = *bls.RandomFr()
 	}
@@ -27,7 +27,7 @@ func BenchmarkBlobToKzg(b *testing.B) {
 	blob := randomBlob()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		kzg.BlobToKzg(blob)
+		kzg.BlobToKZGCommitment(blob)
 	}
 }
 
@@ -40,12 +40,14 @@ func BenchmarkVerifyBlobs(b *testing.B) {
 		for j := range tmp {
 			blobs[i][j] = bls.FrTo32(&tmp[j])
 		}
-		c, ok := blobs[i].ComputeCommitment()
+		frs, ok := blobs[i].ToKZGBlob()
 		if !ok {
 			b.Fatal("Could not compute commitment")
 		}
+		c := types.KZGCommitment(kzg.BlobToKZGCommitment(frs))
 		commitments = append(commitments, c)
-		hashes = append(hashes, c.ComputeVersionedHash())
+		h := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
+		hashes = append(hashes, h)
 	}
 	txData := &types.SignedBlobTx{
 		Message: types.BlobTxMessage{
@@ -94,7 +96,8 @@ func BenchmarkVerifyKZGProof(b *testing.B) {
 
 	// Now let's start testing the kzg module
 	// Create a commitment
-	commitment := kzg.BlobToKzg(evalPoly)
+	k := kzg.BlobToKZGCommitment(evalPoly)
+	commitment, _ := bls.FromCompressedG1(k[:])
 
 	// Create proof for testing
 	x := uint64(17)
@@ -132,12 +135,10 @@ func BenchmarkVerifyMultiple(b *testing.B) {
 						blobElements[j] = bls.FrTo32(&blob[j])
 					}
 					blobs = append(blobs, blobElements)
-					c, ok := blobElements.ComputeCommitment()
-					if !ok {
-						b.Fatal("Could not compute commitment")
-					}
+					c := types.KZGCommitment(kzg.BlobToKZGCommitment(blob))
 					commitments = append(commitments, c)
-					hashes = append(hashes, c.ComputeVersionedHash())
+					h := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
+					hashes = append(hashes, h)
 				}
 				blobsSet = append(blobsSet, blobs)
 				commitmentsSet = append(commitmentsSet, commitments)
@@ -178,44 +179,6 @@ func BenchmarkVerifyMultiple(b *testing.B) {
 					if err := tx.VerifyBlobs(); err != nil {
 						b.Fatal(err)
 					}
-				}
-			}
-		})
-	}
-
-	//runBenchmark(2)
-	//runBenchmark(4)
-	runBenchmark(8)
-	runBenchmark(16)
-}
-
-func BenchmarkBatchVerifyWithoutKZGProofs(b *testing.B) {
-	runBenchmark := func(siz int) {
-		b.Run(fmt.Sprintf("%d", siz), func(b *testing.B) {
-			var blobsSet [][][]bls.Fr
-			var commitmentsSet [][]*bls.G1Point
-			for i := 0; i < siz; i++ {
-				var blobs [][]bls.Fr
-				var commitments []*bls.G1Point
-				for i := 0; i < params.MaxBlobsPerBlock; i++ {
-					blob := randomBlob()
-					blobs = append(blobs, blob)
-					commitments = append(commitments, kzg.BlobToKzg(blob))
-				}
-				blobsSet = append(blobsSet, blobs)
-				commitmentsSet = append(commitmentsSet, commitments)
-			}
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				var batchVerify kzg.BlobsBatch
-				for i := range blobsSet {
-					if err := batchVerify.Join(commitmentsSet[i], blobsSet[i]); err != nil {
-						b.Fatalf("unable to join: %v", err)
-					}
-				}
-				if err := batchVerify.Verify(); err != nil {
-					b.Fatalf("batch verify failed: %v", err)
 				}
 			}
 		})
