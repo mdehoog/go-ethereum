@@ -296,21 +296,6 @@ func (blobs Blobs) copy() Blobs {
 	return cpy
 }
 
-// Return KZG commitments and versioned hashes that correspond to these blobs
-func (blobs Blobs) ComputeCommitments() ([]KZGCommitment, []common.Hash, bool) {
-	commitments := make([]KZGCommitment, len(blobs))
-	versionedHashes := make([]common.Hash, len(blobs))
-	for i, blob := range blobs {
-		frs, ok := blob.ToKZGBlob()
-		if !ok {
-			return nil, nil, false
-		}
-		commitments[i] = KZGCommitment(kzg.BlobToKZGCommitment(frs))
-		versionedHashes[i] = common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(commitments[i])))
-	}
-	return commitments, versionedHashes, true
-}
-
 // Return KZG commitments, versioned hashes and the aggregated KZG proof that correspond to these blobs
 func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGCommitment, versionedHashes []common.Hash, aggregatedProof KZGProof, err error) {
 	commitments = make([]KZGCommitment, len(blobs))
