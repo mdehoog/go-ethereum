@@ -156,20 +156,17 @@ func TestVerifyBlobs(t *testing.T) {
 		copy(blob1[i][:], jsonBlobs.KzgBlob1[i*31:(i+1)*31])
 		copy(blob2[i][:], jsonBlobs.KzgBlob2[i*31:(i+1)*31])
 	}
-
 	// Compute KZG commitments for both of the blobs above
-	frs1, ok1 := blob1.ToKZGBlob()
-	frs2, ok2 := blob2.ToKZGBlob()
+	kzg1, ok1 := kzg.BlobToKZGCommitment(blob1.ToCryptoBlob())
+	kzg2, ok2 := kzg.BlobToKZGCommitment(blob2.ToCryptoBlob())
 	if ok1 == false || ok2 == false {
 		panic("failed to convert blobs")
 	}
-	kzg1 := types.KZGCommitment(kzg.BlobToKZGCommitment(frs1))
-	kzg2 := types.KZGCommitment(kzg.BlobToKZGCommitment(frs2))
 
 	// Create the dummy object with all that data we prepared
 	blobData := types.BlobTxWrapData{
-		BlobKzgs: []types.KZGCommitment{kzg1, kzg2},
-		Blobs:    []types.Blob{blob1, blob2},
+		BlobKzgs: []types.KZGCommitment{types.KZGCommitment(kzg1), types.KZGCommitment(kzg2)},
+		Blobs:    []types.Blob{types.Blob(blob1), types.Blob(blob2)},
 	}
 
 	var hashes []common.Hash
@@ -225,7 +222,7 @@ func TestPointEvaluationTestVector(t *testing.T) {
 	}
 
 	// Create a commitment
-	commitment := kzg.BlobToKZGCommitment(evalPoly)
+	commitment := kzg.PolynomialToKZGCommitment(evalPoly)
 
 	// Create proof for testing
 	x := uint64(0x42)

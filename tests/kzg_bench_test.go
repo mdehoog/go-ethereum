@@ -15,8 +15,8 @@ import (
 	"github.com/protolambda/ztyp/view"
 )
 
-func randomBlob() kzg.Blob {
-	blob := make(kzg.Blob, params.FieldElementsPerBlob)
+func randomBlob() kzg.Polynomial {
+	blob := make(kzg.Polynomial, params.FieldElementsPerBlob)
 	for i := 0; i < len(blob); i++ {
 		blob[i] = *bls.RandomFr()
 	}
@@ -27,7 +27,7 @@ func BenchmarkBlobToKzg(b *testing.B) {
 	blob := randomBlob()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		kzg.BlobToKZGCommitment(blob)
+		kzg.PolynomialToKZGCommitment(blob)
 	}
 }
 

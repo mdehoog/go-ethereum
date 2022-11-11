@@ -149,17 +149,14 @@ func (args *SendTxArgs) ToTransaction() *types.Transaction {
 		msg.Data = input
 		msg.AccessList = types.AccessListView(al)
 		wrapData := types.BlobTxWrapData{}
-		for _, bl := range args.Blobs {
-			frs, ok := bl.ToKZGBlob()
-			if !ok {
-				// invalid BLS blob data (e.g. element not within field element range)
-				continue // can't error, so ignore the malformed blob
+		for _, blob := range args.Blobs {
+			c, ok := kzg.BlobToKZGCommitment(blob)
+			if ok {
+				versionedHash := common.Hash(kzg.KZGToVersionedHash(c))
+				msg.BlobVersionedHashes = append(msg.BlobVersionedHashes, versionedHash)
+				wrapData.BlobKzgs = append(wrapData.BlobKzgs, types.KZGCommitment(c))
+				wrapData.Blobs = append(wrapData.Blobs, blob)
 			}
-			commitment := types.KZGCommitment(kzg.BlobToKZGCommitment(frs))
-			versionedHash := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(commitment)))
-			msg.BlobVersionedHashes = append(msg.BlobVersionedHashes, versionedHash)
-			wrapData.BlobKzgs = append(wrapData.BlobKzgs, commitment)
-			wrapData.Blobs = append(wrapData.Blobs, bl)
 		}
 		_, _, aggProof, err := types.Blobs(args.Blobs).ComputeCommitmentsAndAggregatedProof()
 		if err == nil {
