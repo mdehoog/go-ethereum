@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto/kzg"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/protolambda/go-kzg/bls"
 	"github.com/protolambda/ztyp/codec"
 	"github.com/protolambda/ztyp/tree"
 )
@@ -103,6 +102,7 @@ func (p *KZGProof) UnmarshalText(text []byte) error {
 	return hexutil.UnmarshalFixedText("KZGProof", text, p[:])
 }
 
+// BLSFieldElement is the raw bytes representation of a field element
 type BLSFieldElement [32]byte
 
 func (p BLSFieldElement) MarshalText() ([]byte, error) {
@@ -119,6 +119,16 @@ func (p *BLSFieldElement) UnmarshalText(text []byte) error {
 
 // Blob data
 type Blob [params.FieldElementsPerBlob]BLSFieldElement
+
+// kzg.Blob interface
+func (blob Blob) Len() int {
+	return len(blob)
+}
+
+// kzg.Blob interface
+func (blob Blob) At(i int) [32]byte {
+	return [32]byte(blob[i])
+}
 
 func (blob *Blob) Deserialize(dr *codec.DecodingReader) error {
 	if blob == nil {
@@ -154,17 +164,6 @@ func (blob *Blob) HashTreeRoot(hFn tree.HashFn) tree.Root {
 	return hFn.ComplexVectorHTR(func(i uint64) tree.HTR {
 		return (*tree.Root)(&blob[i])
 	}, params.FieldElementsPerBlob)
-}
-
-// Convert a blob to kzg.Blob
-func (blob *Blob) ToKZGBlob() (kzg.Blob, bool) {
-	frs := make([]bls.Fr, len(blob))
-	for i, elem := range blob {
-		if !bls.FrFrom32(&frs[i], elem) {
-			return []bls.Fr{}, false
-		}
-	}
-	return kzg.Blob(frs), true
 }
 
 func (blob *Blob) MarshalText() ([]byte, error) {
@@ -209,13 +208,13 @@ func (blob *Blob) UnmarshalText(text []byte) error {
 
 type BlobKzgs []KZGCommitment
 
-func (li BlobKzgs) toKZGCommitmentSequence() []kzg.KZGCommitment {
-	l := len(li)
-	kzgs := make([]kzg.KZGCommitment, l)
-	for i := 0; i < l; i++ {
-		kzgs[i] = kzg.KZGCommitment(li[i])
-	}
-	return kzgs
+// kzg.KZGCommitmentSequence interface
+func (bk BlobKzgs) Len() int {
+	return len(bk)
+}
+
+func (bk BlobKzgs) At(i int) kzg.KZGCommitment {
+	return kzg.KZGCommitment(bk[i])
 }
 
 func (li *BlobKzgs) Deserialize(dr *codec.DecodingReader) error {
@@ -254,17 +253,14 @@ func (li BlobKzgs) copy() BlobKzgs {
 
 type Blobs []Blob
 
-// Extract the crypto material underlying these blobs
-func (blobs Blobs) toKZGBlobSequence() ([][]bls.Fr, bool) {
-	out := make([][]bls.Fr, len(blobs))
-	for i, b := range blobs {
-		blob, ok := b.ToKZGBlob()
-		if !ok {
-			return nil, false
-		}
-		out[i] = blob
-	}
-	return out, true
+// kzg.BlobSequence interface
+func (blobs Blobs) Len() int {
+	return len(blobs)
+}
+
+// kzg.BlobSequence interface
+func (blobs Blobs) At(i int) kzg.Blob {
+	return blobs[i]
 }
 
 func (a *Blobs) Deserialize(dr *codec.DecodingReader) error {
@@ -310,11 +306,10 @@ func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGComm
 	commitments = make([]KZGCommitment, len(blobs))
 	versionedHashes = make([]common.Hash, len(blobs))
 	for i, blob := range blobs {
-		frs, ok := blob.ToKZGBlob()
+		c, ok := kzg.BlobToKZGCommitment(blob)
 		if !ok {
-			return nil, nil, KZGProof{}, errors.New("invalid blob for commitment")
+			return nil, nil, KZGProof{}, errors.New("could not convert blob to commitment")
 		}
-		c := kzg.BlobToKZGCommitment(frs)
 		commitments[i] = KZGCommitment(c)
 		versionedHashes[i] = common.Hash(kzg.KZGToVersionedHash(c))
 	}
@@ -323,11 +318,7 @@ func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGComm
 	if len(blobs) != 0 {
 		// TODO: Execution layer shouldn't be responsible for computing the proof, it should
 		// be done in the CL.
-		polys, ok := blobs.toKZGBlobSequence()
-		if !ok {
-			return nil, nil, KZGProof{}, err
-		}
-		proof, err := kzg.ComputeAggregateKZGProof(polys)
+		proof, err := kzg.ComputeAggregateKZGProof(blobs)
 		if err != nil {
 			return nil, nil, KZGProof{}, err
 		}
@@ -355,27 +346,6 @@ func (b *BlobsAndCommitments) ByteLength() uint64 {
 }
 
 func (b *BlobsAndCommitments) FixedLength() uint64 {
-	return 0
-}
-
-type PolynomialAndCommitment struct {
-	b Blob
-	c KZGCommitment
-}
-
-func (p *PolynomialAndCommitment) HashTreeRoot(hFn tree.HashFn) tree.Root {
-	return hFn.HashTreeRoot(&p.b, &p.c)
-}
-
-func (p *PolynomialAndCommitment) Serialize(w *codec.EncodingWriter) error {
-	return w.Container(&p.b, &p.c)
-}
-
-func (p *PolynomialAndCommitment) ByteLength() uint64 {
-	return codec.ContainerLength(&p.b, &p.c)
-}
-
-func (p *PolynomialAndCommitment) FixedLength() uint64 {
 	return 0
 }
 
@@ -443,12 +413,7 @@ func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
 	if err := b.verifyVersionedHash(inner); err != nil {
 		return err
 	}
-	polys, ok := b.Blobs.toKZGBlobSequence()
-	if !ok {
-		return errors.New("could not convert blobs to blob sequence")
-	}
-	kzgs := b.BlobKzgs.toKZGCommitmentSequence()
-	ok, err := kzg.VerifyAggregateKZGProof(polys, kzgs, kzg.KZGProof(b.KzgAggregatedProof))
+	ok, err := kzg.VerifyAggregateKZGProof(b.Blobs, b.BlobKzgs, kzg.KZGProof(b.KzgAggregatedProof))
 	if err != nil {
 		return fmt.Errorf("error during proof verification: %v", err)
 	}

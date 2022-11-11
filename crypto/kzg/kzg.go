@@ -1,3 +1,9 @@
+// Package kzg implements the various EIP-4844 function specifications as defined
+// in the EIP-4844 proposal and the EIP-4844 consensus specs:
+//   https://eips.ethereum.org/EIPS/eip-4844
+//   https://github.com/roberto-bayardo/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md
+//
+// Most users of this package will want to use the bytes API in kzg_bytes.go
 package kzg
 
 import (
