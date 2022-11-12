@@ -35,7 +35,6 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	if len(input) != 192 {
 		return nil, errors.New("invalid input length")
 	}
-
 	// versioned hash: first 32 bytes
 	var versionedHash [32]byte
 	copy(versionedHash[:], input[:32])
@@ -45,17 +44,6 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	copy(x[:], input[32:64])
 	// Expected output: next 32 bytes
 	copy(y[:], input[64:96])
-
-	// successfully converting x and y to bls.Fr confirms they are < MODULUS per the spec
-	var xFr, yFr bls.Fr
-	ok := bls.FrFrom32(&xFr, x)
-	if !ok {
-		return nil, errors.New("invalid evaluation point")
-	}
-	ok = bls.FrFrom32(&yFr, y)
-	if !ok {
-		return nil, errors.New("invalid expected output")
-	}
 
 	// input kzg point: next 48 bytes
 	var dataKZG [48]byte
@@ -68,7 +56,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	var quotientKZG [48]byte
 	copy(quotientKZG[:], input[144:192])
 
-	ok, err := VerifyKZGProof(KZGCommitment(dataKZG), &xFr, &yFr, KZGProof(quotientKZG))
+	ok, err := VerifyKZGProof(KZGCommitment(dataKZG), x, y, KZGProof(quotientKZG))
 	if err != nil {
 		return nil, fmt.Errorf("verify_kzg_proof error: %v", err)
 	}
@@ -76,6 +64,30 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 		return nil, errors.New("failed to verify kzg proof")
 	}
 	return []byte{}, nil
+}
+
+// VerifyKZGProof implements verify_kzg_proof from the EIP-4844 consensus spec:
+// https://github.com/ethereum/consensus-specs/blob/dev/specs/eip4844/polynomial-commitments.md#verify_kzg_proof
+func VerifyKZGProof(polynomialKZG KZGCommitment, z, y [32]byte, kzgProof KZGProof) (bool, error) {
+	// successfully converting z and y to bls.Fr confirms they are < MODULUS per the spec
+	var zFr, yFr bls.Fr
+	ok := bls.FrFrom32(&yFr, z)
+	if !ok {
+		return false, errors.New("invalid evaluation point")
+	}
+	ok = bls.FrFrom32(&yFr, y)
+	if !ok {
+		return false, errors.New("invalid expected output")
+	}
+	polynomialKZGG1, err := bls.FromCompressedG1(polynomialKZG[:])
+	if err != nil {
+		return false, fmt.Errorf("failed to decode polynomialKZG: %v", err)
+	}
+	kzgProofG1, err := bls.FromCompressedG1(kzgProof[:])
+	if err != nil {
+		return false, fmt.Errorf("failed to decode kzgProof: %v", err)
+	}
+	return VerifyKZGProofFromPoints(polynomialKZGG1, &zFr, &yFr, kzgProofG1), nil
 }
 
 // KZGToVersionedHash implements kzg_to_versioned_hash from EIP-4844
@@ -108,7 +120,11 @@ func VerifyAggregateKZGProof(blobs BlobSequence, expectedKZGCommitments KZGCommi
 		return false, err
 	}
 	y := EvaluatePolynomialInEvaluationForm(aggregatedPoly, evaluationChallenge)
-	return VerifyKZGProof(aggregatedPolyCommitment, evaluationChallenge, y, kzgAggregatedProof)
+	kzgProofG1, err := bls.FromCompressedG1(kzgAggregatedProof[:])
+	if err != nil {
+		return false, fmt.Errorf("failed to decode kzgProof: %v", err)
+	}
+	return VerifyKZGProofFromPoints(aggregatedPolyCommitment, evaluationChallenge, y, kzgProofG1), nil
 }
 
 // ComputeAggregateKZGProof implements compute_aggregate_kzg_proof from the EIP-4844 consensus spec:

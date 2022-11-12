@@ -1,3 +1,4 @@
+// TODO: Migrate these to crypto/kzg
 package tests
 
 import (
@@ -157,8 +158,8 @@ func TestVerifyBlobs(t *testing.T) {
 		copy(blob2[i][:], jsonBlobs.KzgBlob2[i*31:(i+1)*31])
 	}
 	// Compute KZG commitments for both of the blobs above
-	kzg1, ok1 := kzg.BlobToKZGCommitment(blob1.ToCryptoBlob())
-	kzg2, ok2 := kzg.BlobToKZGCommitment(blob2.ToCryptoBlob())
+	kzg1, ok1 := kzg.BlobToKZGCommitment(blob1)
+	kzg2, ok2 := kzg.BlobToKZGCommitment(blob2)
 	if ok1 == false || ok2 == false {
 		panic("failed to convert blobs")
 	}
