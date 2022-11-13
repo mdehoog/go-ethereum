@@ -71,7 +71,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 func VerifyKZGProof(polynomialKZG KZGCommitment, z, y [32]byte, kzgProof KZGProof) (bool, error) {
 	// successfully converting z and y to bls.Fr confirms they are < MODULUS per the spec
 	var zFr, yFr bls.Fr
-	ok := bls.FrFrom32(&yFr, z)
+	ok := bls.FrFrom32(&zFr, z)
 	if !ok {
 		return false, errors.New("invalid evaluation point")
 	}
