@@ -490,7 +490,7 @@ func TestTransactionCoding(t *testing.T) {
 					GasTipCap:           view.Uint256View(*uint256.NewInt(42)),
 					GasFeeCap:           view.Uint256View(*uint256.NewInt(10)),
 					AccessList:          AccessListView(accesses),
-					BlobVersionedHashes: VersionedHashesView{common.HexToHash("0x01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e")},
+					BlobVersionedHashes: VersionedHashesView{common.HexToHash("0x010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014")},
 				},
 			}
 			var kzgProof KZGProof

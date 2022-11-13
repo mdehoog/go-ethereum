@@ -386,32 +386,23 @@ func (b *BlobTxWrapData) sizeWrapData() common.StorageSize {
 	return common.StorageSize(4 + 4 + b.BlobKzgs.ByteLength() + b.Blobs.ByteLength() + b.KzgAggregatedProof.ByteLength())
 }
 
-func (b *BlobTxWrapData) verifyVersionedHash(inner TxData) error {
+// validateBlobTransactionWrapper implements validate_blob_transaction_wrapper from EIP-4844
+func (b *BlobTxWrapData) validateBlobTransactionWrapper(inner TxData) error {
 	blobTx, ok := inner.(*SignedBlobTx)
 	if !ok {
 		return fmt.Errorf("expected signed blob tx, got %T", inner)
 	}
-	if a, b := len(blobTx.Message.BlobVersionedHashes), params.MaxBlobsPerBlock; a > b {
-		return fmt.Errorf("too many blobs in blob tx, got %d, expected no more than %d", a, b)
+	l1 := len(b.BlobKzgs)
+	l2 := len(blobTx.Message.BlobVersionedHashes)
+	l3 := len(b.Blobs)
+	if l1 != l2 || l2 != l3 {
+		return fmt.Errorf("lengths don't match %v %v %v", l1, l2, l3)
 	}
-	if a, b := len(b.BlobKzgs), len(b.Blobs); a != b {
-		return fmt.Errorf("expected equal amount but got %d kzgs and %d blobs", a, b)
-	}
-	if a, b := len(b.BlobKzgs), len(blobTx.Message.BlobVersionedHashes); a != b {
-		return fmt.Errorf("expected equal amount but got %d kzgs and %d versioned hashes", a, b)
-	}
-	for i, h := range blobTx.Message.BlobVersionedHashes {
-		if computed := b.BlobKzgs[i].ComputeVersionedHash(); computed != h {
-			return fmt.Errorf("versioned hash %d supposedly %s but does not match computed %s", i, h, computed)
-		}
-	}
-	return nil
-}
-
-// Blob verification using KZG proofs
-func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
-	if err := b.verifyVersionedHash(inner); err != nil {
-		return err
+	// the following check isn't strictly necessary as it would be caught by data gas processing
+	// (and hence it is not explicitly in the spec for this function), but it doesn't hurt to fail
+	// early in case we are getting spammed with too many blobs or there is a bug somewhere:
+	if l1 > params.MaxBlobsPerBlock {
+		return fmt.Errorf("number of blobs exceeds max: %v", l1)
 	}
 	ok, err := kzg.VerifyAggregateKZGProof(b.Blobs, b.BlobKzgs, kzg.KZGProof(b.KzgAggregatedProof))
 	if err != nil {
@@ -419,6 +410,11 @@ func (b *BlobTxWrapData) verifyBlobs(inner TxData) error {
 	}
 	if !ok {
 		return errors.New("failed to verify kzg")
+	}
+	for i, h := range blobTx.Message.BlobVersionedHashes {
+		if computed := b.BlobKzgs[i].ComputeVersionedHash(); computed != h {
+			return fmt.Errorf("versioned hash %d supposedly %s but does not match computed %s", i, h, computed)
+		}
 	}
 	return nil
 }
