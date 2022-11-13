@@ -14,6 +14,15 @@ import (
 type KZGCommitment [48]byte
 type KZGProof [48]byte
 type VersionedHash [32]byte
+type Root [32]byte
+type Slot uint64
+
+type BlobsSidecar struct {
+	BeaconBlockRoot    Root
+	BeaconBlockSlot    Slot
+	Blobs              BlobSequence
+	KZGAggregatedProof KZGProof
+}
 
 type BlobSequence interface {
 	Len() int
@@ -29,6 +38,10 @@ type KZGCommitmentSequence interface {
 	Len() int
 	At(int) KZGCommitment
 }
+
+var (
+	invalidKZGProofError = errors.New("invalid kzg proof")
+)
 
 // PointEvaluationPrecompile implements point_evaluation_precompile from EIP-4844
 func PointEvaluationPrecompile(input []byte) ([]byte, error) {
@@ -61,7 +74,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 		return nil, fmt.Errorf("verify_kzg_proof error: %v", err)
 	}
 	if !ok {
-		return nil, errors.New("failed to verify kzg proof")
+		return nil, invalidKZGProofError
 	}
 	return []byte{}, nil
 }
@@ -135,4 +148,31 @@ func ComputeAggregateKZGProof(blobs BlobSequence) (KZGProof, error) {
 		return KZGProof{}, errors.New("could not convert blobs to polynomials")
 	}
 	return ComputeAggregateKZGProofFromPolynomials(polynomials)
+}
+
+// ValidateBlobsSidecar implements validate_blobs_sidecar from the EIP-4844 consensus spec:
+// https://github.com/roberto-bayardo/consensus-specs/blob/dev/specs/eip4844/beacon-chain.md#validate_blobs_sidecar
+func ValidateBlobsSidecar(slot Slot, beaconBlockRoot Root, expectedKZGCommitments KZGCommitmentSequence, blobsSidecar BlobsSidecar) error {
+	if slot != blobsSidecar.BeaconBlockSlot {
+		return fmt.Errorf(
+			"slot doesn't match sidecar's beacon block slot (%v != %v)",
+			slot, blobsSidecar.BeaconBlockSlot)
+	}
+	if beaconBlockRoot != blobsSidecar.BeaconBlockRoot {
+		return errors.New("roots not equal")
+	}
+	blobs := blobsSidecar.Blobs
+	if blobs.Len() != expectedKZGCommitments.Len() {
+		return fmt.Errorf(
+			"blob len doesn't match expected kzg commitments len (%v != %v)",
+			blobs.Len(), expectedKZGCommitments.Len())
+	}
+	ok, err := VerifyAggregateKZGProof(blobs, expectedKZGCommitments, blobsSidecar.KZGAggregatedProof)
+	if err != nil {
+		return fmt.Errorf("verify_aggregate_kzg_proof error: %v", err)
+	}
+	if !ok {
+		return invalidKZGProofError
+	}
+	return nil
 }
