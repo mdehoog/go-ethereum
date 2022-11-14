@@ -316,8 +316,6 @@ func (blobs Blobs) ComputeCommitmentsAndAggregatedProof() (commitments []KZGComm
 
 	var kzgProof KZGProof
 	if len(blobs) != 0 {
-		// TODO: Execution layer shouldn't be responsible for computing the proof, it should
-		// be done in the CL.
 		proof, err := kzg.ComputeAggregateKZGProof(blobs)
 		if err != nil {
 			return nil, nil, KZGProof{}, err

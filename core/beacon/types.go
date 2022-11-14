@@ -43,10 +43,9 @@ type payloadAttributesMarshaling struct {
 
 // BlobsBundleV1 holds the blobs of an execution payload, to be retrieved separately
 type BlobsBundleV1 struct {
-	BlockHash       common.Hash           `json:"blockHash"     gencodec:"required"`
-	KZGs            []types.KZGCommitment `json:"kzgs"      gencodec:"required"`
-	Blobs           []types.Blob          `json:"blobs"      gencodec:"required"`
-	AggregatedProof types.KZGProof        `json:"aggregatedProof" gencodec:"required"`
+	BlockHash common.Hash           `json:"blockHash"     gencodec:"required"`
+	KZGs      []types.KZGCommitment `json:"kzgs"      gencodec:"required"`
+	Blobs     []types.Blob          `json:"blobs"      gencodec:"required"`
 }
 
 //go:generate go run github.com/fjl/gencodec -type ExecutableDataV1 -field-override executableDataMarshaling -out gen_ed.go
@@ -236,11 +235,5 @@ func BlockToBlobData(block *types.Block) (*BlobsBundleV1, error) {
 			blobsBundle.KZGs = append(blobsBundle.KZGs, kzgs...)
 		}
 	}
-
-	_, _, aggregatedProof, err := types.Blobs(blobsBundle.Blobs).ComputeCommitmentsAndAggregatedProof()
-	if err != nil {
-		return nil, err
-	}
-	blobsBundle.AggregatedProof = aggregatedProof
 	return blobsBundle, nil
 }
