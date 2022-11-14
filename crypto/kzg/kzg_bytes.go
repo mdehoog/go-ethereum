@@ -39,13 +39,17 @@ type KZGCommitmentSequence interface {
 	At(int) KZGCommitment
 }
 
+const (
+	PrecompileInputLength = 192
+)
+
 var (
 	invalidKZGProofError = errors.New("invalid kzg proof")
 )
 
 // PointEvaluationPrecompile implements point_evaluation_precompile from EIP-4844
 func PointEvaluationPrecompile(input []byte) ([]byte, error) {
-	if len(input) != 192 {
+	if len(input) != PrecompileInputLength {
 		return nil, errors.New("invalid input length")
 	}
 	// versioned hash: first 32 bytes
@@ -67,7 +71,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 
 	// Quotient kzg: next 48 bytes
 	var quotientKZG [48]byte
-	copy(quotientKZG[:], input[144:192])
+	copy(quotientKZG[:], input[144:PrecompileInputLength])
 
 	ok, err := VerifyKZGProof(KZGCommitment(dataKZG), x, y, KZGProof(quotientKZG))
 	if err != nil {
