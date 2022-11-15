@@ -1,3 +1,4 @@
+// TODO: Migrate these to crypto/kzg
 package tests
 
 import (
@@ -15,8 +16,8 @@ import (
 	"github.com/protolambda/ztyp/view"
 )
 
-func randomBlob() kzg.Blob {
-	blob := make(kzg.Blob, params.FieldElementsPerBlob)
+func randomBlob() kzg.Polynomial {
+	blob := make(kzg.Polynomial, params.FieldElementsPerBlob)
 	for i := 0; i < len(blob); i++ {
 		blob[i] = *bls.RandomFr()
 	}
@@ -27,7 +28,7 @@ func BenchmarkBlobToKzg(b *testing.B) {
 	blob := randomBlob()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		kzg.BlobToKZGCommitment(blob)
+		kzg.PolynomialToKZGCommitment(blob)
 	}
 }
 
@@ -40,11 +41,11 @@ func BenchmarkVerifyBlobs(b *testing.B) {
 		for j := range tmp {
 			blobs[i][j] = bls.FrTo32(&tmp[j])
 		}
-		frs, ok := blobs[i].ToKZGBlob()
+		frs, ok := kzg.BlobToPolynomial(blobs[i])
 		if !ok {
 			b.Fatal("Could not compute commitment")
 		}
-		c := types.KZGCommitment(kzg.BlobToKZGCommitment(frs))
+		c := types.KZGCommitment(kzg.PolynomialToKZGCommitment(frs))
 		commitments = append(commitments, c)
 		h := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
 		hashes = append(hashes, h)
@@ -96,7 +97,7 @@ func BenchmarkVerifyKZGProof(b *testing.B) {
 
 	// Now let's start testing the kzg module
 	// Create a commitment
-	k := kzg.BlobToKZGCommitment(evalPoly)
+	k := kzg.PolynomialToKZGCommitment(evalPoly)
 	commitment, _ := bls.FromCompressedG1(k[:])
 
 	// Create proof for testing
@@ -135,7 +136,7 @@ func BenchmarkVerifyMultiple(b *testing.B) {
 						blobElements[j] = bls.FrTo32(&blob[j])
 					}
 					blobs = append(blobs, blobElements)
-					c := types.KZGCommitment(kzg.BlobToKZGCommitment(blob))
+					c := types.KZGCommitment(kzg.PolynomialToKZGCommitment(blob))
 					commitments = append(commitments, c)
 					h := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(c)))
 					hashes = append(hashes, h)

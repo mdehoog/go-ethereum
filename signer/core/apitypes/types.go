@@ -38,7 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/kzg"
 )
 
 var typedDataReferenceTypeRegexp = regexp.MustCompile(`^[A-Z](\w*)(\[\])?$`)
@@ -116,7 +115,7 @@ func (args SendTxArgs) String() string {
 }
 
 // ToTransaction converts the arguments to a transaction.
-func (args *SendTxArgs) ToTransaction() *types.Transaction {
+func (args *SendTxArgs) ToTransaction() (*types.Transaction, error) {
 	// Add the To-field, if specified
 	var to *common.Address
 	if args.To != nil {
@@ -148,25 +147,18 @@ func (args *SendTxArgs) ToTransaction() *types.Transaction {
 		msg.Value.SetFromBig((*big.Int)(&args.Value))
 		msg.Data = input
 		msg.AccessList = types.AccessListView(al)
-		wrapData := types.BlobTxWrapData{}
-		for _, bl := range args.Blobs {
-			frs, ok := bl.ToKZGBlob()
-			if !ok {
-				// invalid BLS blob data (e.g. element not within field element range)
-				continue // can't error, so ignore the malformed blob
-			}
-			commitment := types.KZGCommitment(kzg.BlobToKZGCommitment(frs))
-			versionedHash := common.Hash(kzg.KZGToVersionedHash(kzg.KZGCommitment(commitment)))
-			msg.BlobVersionedHashes = append(msg.BlobVersionedHashes, versionedHash)
-			wrapData.BlobKzgs = append(wrapData.BlobKzgs, commitment)
-			wrapData.Blobs = append(wrapData.Blobs, bl)
+		commitments, hashes, aggProof, err := types.Blobs(args.Blobs).ComputeCommitmentsAndAggregatedProof()
+		if err != nil {
+			return nil, fmt.Errorf("invalid blobs: %v", err)
 		}
-		_, _, aggProof, err := types.Blobs(args.Blobs).ComputeCommitmentsAndAggregatedProof()
-		if err == nil {
-			wrapData.KzgAggregatedProof = aggProof
+		msg.BlobVersionedHashes = hashes
+		wrapData := types.BlobTxWrapData{
+			Blobs:              args.Blobs,
+			KzgAggregatedProof: aggProof,
+			BlobKzgs:           commitments,
 		}
 		data = &types.SignedBlobTx{Message: msg}
-		return types.NewTx(data, types.WithTxWrapData(&wrapData))
+		return types.NewTx(data, types.WithTxWrapData(&wrapData)), nil
 	case args.MaxFeePerGas != nil:
 		al := types.AccessList{}
 		if args.AccessList != nil {
@@ -204,7 +196,7 @@ func (args *SendTxArgs) ToTransaction() *types.Transaction {
 			Data:     input,
 		}
 	}
-	return types.NewTx(data)
+	return types.NewTx(data), nil
 }
 
 type SigFormat struct {

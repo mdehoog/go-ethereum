@@ -362,7 +362,7 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 				KzgAggregatedProof: dec.KzgAggregatedProof,
 			}
 			// Verify that versioned hashes match kzgs, and kzgs match blobs.
-			if err := tx.wrapData.verifyBlobs(&itx); err != nil {
+			if err := tx.wrapData.validateBlobTransactionWrapper(&itx); err != nil {
 				return fmt.Errorf("blob wrapping data is invalid: %v", err)
 			}
 		}
