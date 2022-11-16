@@ -185,20 +185,10 @@ func ComputeAggregatedPolyAndCommitment(blobs Polynomials, commitments KZGCommit
 	return aggregatedPoly, aggregatedCommitmentG1, &evaluationChallenge, nil
 }
 
-type commitmentSequenceImpl []KZGCommitment
-
-func (s commitmentSequenceImpl) At(i int) KZGCommitment {
-	return s[i]
-}
-
-func (s commitmentSequenceImpl) Len() int {
-	return len(s)
-}
-
 // ComputeAggregateKZGProofFromPolynomials implements compute_aggregate_kzg_proof from the EIP-4844
 // consensus spec, only operating over blobs that are already parsed into a polynomial.
 func ComputeAggregateKZGProofFromPolynomials(blobs Polynomials) (KZGProof, error) {
-	commitments := make(commitmentSequenceImpl, len(blobs))
+	commitments := make(KZGCommitmentSequenceImpl, len(blobs))
 	for i, b := range blobs {
 		commitments[i] = PolynomialToKZGCommitment(Polynomial(b))
 	}
