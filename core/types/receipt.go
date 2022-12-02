@@ -402,7 +402,10 @@ func (rs Receipts) EncodeIndex(i int, w *bytes.Buffer) {
 // DeriveFields fills the receipts with their computed fields based on consensus
 // data and contextual infos like containing block and transactions.
 func (rs Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, number uint64, txs Transactions) error {
-	signer := MakeSigner(config, new(big.Int).SetUint64(number))
+	// TODO(eip-4844): We don't have the block Time so we can't use MakeSigner any longer; make
+	// sure using LatestSigner instead is ok.
+	signer := LatestSigner(config)
+	//signer := MakeSigner(config, new(big.Int).SetUint64(number))
 
 	logIndex := uint(0)
 	if len(txs) != len(rs) {
