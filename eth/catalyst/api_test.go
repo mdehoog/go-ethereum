@@ -52,7 +52,8 @@ var (
 	testBalance = big.NewInt(2e18)
 )
 
-func generateMergeChain(n int, merged bool) (*core.Genesis, []*types.Block) {
+// generateChain builds a block chain containing n blocks. A post-merge chain is generated iff merge is set
+func generateChain(n int, merged bool) (*core.Genesis, []*types.Block) {
 	config := *params.AllEthashProtocolChanges
 	if merged {
 		config.TerminalTotalDifficulty = common.Big0
@@ -86,7 +87,7 @@ func generateMergeChain(n int, merged bool) (*core.Genesis, []*types.Block) {
 }
 
 func TestEth2AssembleBlock(t *testing.T) {
-	genesis, blocks := generateMergeChain(10, false)
+	genesis, blocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, blocks)
 	defer n.Close()
 
@@ -125,7 +126,7 @@ func assembleWithTransactions(api *ConsensusAPI, parentHash common.Hash, params 
 }
 
 func TestEth2AssembleBlockWithAnotherBlocksTxs(t *testing.T) {
-	genesis, blocks := generateMergeChain(10, false)
+	genesis, blocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, blocks[:9])
 	defer n.Close()
 
@@ -144,7 +145,7 @@ func TestEth2AssembleBlockWithAnotherBlocksTxs(t *testing.T) {
 }
 
 func TestSetHeadBeforeTotalDifficulty(t *testing.T) {
-	genesis, blocks := generateMergeChain(10, false)
+	genesis, blocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, blocks)
 	defer n.Close()
 
@@ -162,7 +163,7 @@ func TestSetHeadBeforeTotalDifficulty(t *testing.T) {
 }
 
 func TestEth2PrepareAndGetPayload(t *testing.T) {
-	genesis, blocks := generateMergeChain(10, false)
+	genesis, blocks := generateChain(10, false)
 	// We need to properly set the terminal total difficulty
 	genesis.Config.TerminalTotalDifficulty.Sub(genesis.Config.TerminalTotalDifficulty, blocks[9].Difficulty())
 	n, ethservice := startEthService(t, genesis, blocks[:9])
@@ -228,7 +229,7 @@ func checkLogEvents(t *testing.T, logsCh <-chan []*types.Log, rmLogsCh <-chan co
 }
 
 func TestInvalidPayloadTimestamp(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 	var (
@@ -272,7 +273,7 @@ func TestInvalidPayloadTimestamp(t *testing.T) {
 }
 
 func TestEth2NewBlock(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 
@@ -374,7 +375,7 @@ func TestEth2DeepReorg(t *testing.T) {
 	// TODO (MariusVanDerWijden) TestEth2DeepReorg is currently broken, because it tries to reorg
 	// before the totalTerminalDifficulty threshold
 	/*
-		genesis, preMergeBlocks := generateMergeChain(core.TriesInMemory * 2, false)
+		genesis, preMergeBlocks := generateChain(core.TriesInMemory * 2, false)
 		n, ethservice := startEthService(t, genesis, preMergeBlocks)
 		defer n.Close()
 
@@ -449,7 +450,7 @@ func startEthService(t *testing.T, genesis *core.Genesis, blocks []*types.Block)
 }
 
 func TestFullAPI(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 	var (
@@ -501,7 +502,7 @@ func setupBlocks(t *testing.T, ethservice *eth.Ethereum, n int, parent *types.Bl
 }
 
 func TestExchangeTransitionConfig(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 
@@ -562,7 +563,7 @@ We expect
 	                └── P1''
 */
 func TestNewPayloadOnInvalidChain(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 
@@ -656,7 +657,7 @@ func assembleBlock(api *ConsensusAPI, parentHash common.Hash, params *beacon.Pay
 }
 
 func TestEmptyBlocks(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 
@@ -772,7 +773,7 @@ func decodeTransactions(enc [][]byte) ([]*types.Transaction, error) {
 
 func TestTrickRemoteBlockCache(t *testing.T) {
 	// Setup two nodes
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	nodeA, ethserviceA := startEthService(t, genesis, preMergeBlocks)
 	nodeB, ethserviceB := startEthService(t, genesis, preMergeBlocks)
 	defer nodeA.Close()
@@ -835,7 +836,7 @@ func TestTrickRemoteBlockCache(t *testing.T) {
 }
 
 func TestInvalidBloom(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	ethservice.Merger().ReachTTD()
 	defer n.Close()
@@ -859,7 +860,7 @@ func TestInvalidBloom(t *testing.T) {
 }
 
 func TestNewPayloadOnInvalidTerminalBlock(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(100, false)
+	genesis, preMergeBlocks := generateChain(100, false)
 	genesis.Config.TerminalTotalDifficulty = preMergeBlocks[0].Difficulty() //.Sub(genesis.Config.TerminalTotalDifficulty, preMergeBlocks[len(preMergeBlocks)-1].Difficulty())
 
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
@@ -909,7 +910,7 @@ func TestNewPayloadOnInvalidTerminalBlock(t *testing.T) {
 // newPayLoad and forkchoiceUpdate. This is to test that the api behaves
 // well even of the caller is not being 'serial'.
 func TestSimultaneousNewBlock(t *testing.T) {
-	genesis, preMergeBlocks := generateMergeChain(10, false)
+	genesis, preMergeBlocks := generateChain(10, false)
 	n, ethservice := startEthService(t, genesis, preMergeBlocks)
 	defer n.Close()
 
@@ -994,7 +995,7 @@ func TestSimultaneousNewBlock(t *testing.T) {
 }
 
 func TestEIP4844(t *testing.T) {
-	genesis, blocks := generateMergeChain(10, true)
+	genesis, blocks := generateChain(10, true)
 	lastBlockTime := blocks[len(blocks)-1].Time()
 	genesis.Config.ShanghaiTime = new(uint64)
 	*genesis.Config.ShanghaiTime = lastBlockTime + 10 // chainmakers block time is fixed at 10 seconds
