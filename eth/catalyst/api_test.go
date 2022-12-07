@@ -1083,7 +1083,7 @@ func TestEIP4844Withdrawals(t *testing.T) {
 	if execData.StateRoot != parent.Root {
 		t.Fatalf("mismatch state roots (got: %s, want: %s)", execData.StateRoot, blocks[8].Root())
 	}
-	if execData.Withdrawals == nil {
+	if execData.Withdrawals == nil || len(execData.Withdrawals) != 0 {
 		t.Fatalf("expected empty withdrawals list. got %v", execData.Withdrawals)
 	}
 }
