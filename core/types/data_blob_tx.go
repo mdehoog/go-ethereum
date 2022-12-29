@@ -36,6 +36,10 @@ func (*ECDSASignature) FixedLength() uint64 {
 	return 1 + 32 + 32
 }
 
+func (s *ECDSASignature) HashTreeRoot(hFn tree.HashFn) tree.Root {
+	return hFn.HashTreeRoot(&s.V, &s.R, &s.S)
+}
+
 type AddressSSZ common.Address
 
 func (addr *AddressSSZ) Deserialize(dr *codec.DecodingReader) error {
@@ -342,6 +346,10 @@ func (tx *BlobTxMessage) FixedLength() uint64 {
 	return 0
 }
 
+func (tx *BlobTxMessage) HashTreeRoot(hFn tree.HashFn) tree.Root {
+	return hFn.HashTreeRoot(&tx.ChainID, &tx.Nonce, &tx.GasTipCap, &tx.GasFeeCap, &tx.Gas, &tx.To, &tx.Value, &tx.Data, &tx.AccessList, &tx.MaxFeePerDataGas, &tx.BlobVersionedHashes)
+}
+
 func (stx *SignedBlobTx) ByteLength() uint64 {
 	return codec.ContainerLength(&stx.Message, &stx.Signature)
 }
@@ -350,8 +358,8 @@ func (stx *SignedBlobTx) FixedLength() uint64 {
 	return 0
 }
 
-func (tx *BlobTxMessage) HashTreeRoot(hFn tree.HashFn) tree.Root {
-	return hFn.HashTreeRoot(&tx.ChainID, &tx.Nonce, &tx.GasTipCap, &tx.GasFeeCap, &tx.Gas, &tx.To, &tx.Value, &tx.Data, &tx.AccessList, &tx.MaxFeePerDataGas, &tx.BlobVersionedHashes)
+func (tx *SignedBlobTx) HashTreeRoot(hFn tree.HashFn) tree.Root {
+	return hFn.HashTreeRoot(&tx.Message, &tx.Signature)
 }
 
 // copy creates a deep copy of the transaction data and initializes all fields.
