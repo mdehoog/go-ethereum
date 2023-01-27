@@ -89,7 +89,11 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if rbloom != header.Bloom {
 		return fmt.Errorf("invalid bloom (remote: %x  local: %x)", header.Bloom, rbloom)
 	}
+	fmt.Printf("Header: %#v\n", header)
 	// Tre receipt Trie's root (R = (Tr [[H1, R1], ... [Hn, Rn]]))
+	for i := range receipts {
+		fmt.Printf("Got receipt %i: %#v\n", i, receipts[i])
+	}
 	receiptSha := types.DeriveSha(receipts, trie.NewStackTrie(nil))
 	if receiptSha != header.ReceiptHash {
 		return fmt.Errorf("invalid receipt root hash (remote: %x local: %x)", header.ReceiptHash, receiptSha)

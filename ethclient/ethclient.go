@@ -111,11 +111,13 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 	var raw json.RawMessage
 	err := ec.c.CallContext(ctx, &raw, method, args...)
 	if err != nil {
+		fmt.Println("error :(", err)
 		return nil, err
 	} else if len(raw) == 0 {
 		return nil, ethereum.NotFound
 	}
 	// Decode header and transactions.
+	fmt.Println("Raw Getblock response:", string(raw))
 	var head *types.Header
 	var body rpcBlock
 	if err := json.Unmarshal(raw, &head); err != nil {

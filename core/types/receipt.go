@@ -125,6 +125,7 @@ func (r *Receipt) EncodeRLP(w io.Writer) error {
 	if err := r.encodeTyped(data, buf); err != nil {
 		return err
 	}
+	fmt.Printf("Encoded %x\n", buf.Bytes())
 	return rlp.Encode(w, buf.Bytes())
 }
 
