@@ -135,12 +135,8 @@ func (blob *Blob) FixedLength() uint64 {
 	return params.FieldElementsPerBlob * 32
 }
 
-// TODO: Mofi -- can remove
 func (blob *Blob) MarshalText() ([]byte, error) {
-
-	// TODO: This was previously writing a BLSFieldElement
-	// TODO into 64 bytes, whereas a bls field element is 32 bytes
-	out := make([]byte, 2+params.FieldElementsPerBlob*32)
+	out := make([]byte, 2+params.FieldElementsPerBlob*32*2)
 	copy(out[:2], "0x")
 	hex.Encode(out[2:], blob[:])
 
@@ -155,12 +151,11 @@ func (blob *Blob) String() string {
 	return string(v)
 }
 
-// TODO: Mofi -- can remove
 func (blob *Blob) UnmarshalText(text []byte) error {
 	if blob == nil {
 		return errors.New("cannot decode text into nil Blob")
 	}
-	l := 2 + params.FieldElementsPerBlob*32
+	l := 2 + params.FieldElementsPerBlob*32*2
 	if len(text) != l {
 		return fmt.Errorf("expected %d characters but got %d", l, len(text))
 	}
