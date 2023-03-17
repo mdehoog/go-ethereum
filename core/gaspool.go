@@ -80,7 +80,7 @@ func (gp *GasPool) SetGas(gas uint64) {
 	gp.gas = gas
 }
 
-// SetGas sets the amount of data gas with the provided number.
+// SetDataGas sets the amount of data gas with the provided number.
 func (gp *GasPool) SetDataGas(dataGas uint64) {
 	gp.dataGas = dataGas
 }

@@ -188,9 +188,10 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		statedb.SetTxContext(tx.Hash(), txIndex)
 
 		var (
-			txContext = core.NewEVMTxContext(msg)
-			snapshot  = statedb.Snapshot()
-			prevGas   = gaspool.Gas()
+			txContext   = core.NewEVMTxContext(msg)
+			snapshot    = statedb.Snapshot()
+			prevGas     = gaspool.Gas()
+			prevDataGas = gaspool.DataGas()
 		)
 		evm := vm.NewEVM(vmContext, txContext, statedb, chainConfig, vmConfig)
 
@@ -201,6 +202,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			log.Info("rejected tx", "index", i, "hash", tx.Hash(), "from", msg.From, "error", err)
 			rejectedTxs = append(rejectedTxs, &rejectedTx{i, err.Error()})
 			gaspool.SetGas(prevGas)
+			gaspool.SetDataGas(prevDataGas)
 			continue
 		}
 		includedTxs = append(includedTxs, tx)
