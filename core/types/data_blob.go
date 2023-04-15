@@ -349,8 +349,9 @@ func (b *BlobTxWrapData) validateBlobTransactionWrapper(inner TxData) error {
 	l1 := len(b.BlobKzgs)
 	l2 := len(blobTx.Message.BlobVersionedHashes)
 	l3 := len(b.Blobs)
-	if l1 != l2 || l2 != l3 {
-		return fmt.Errorf("lengths don't match %v %v %v", l1, l2, l3)
+	l4 := len(b.Proofs)
+	if l1 != l2 || 11 != l3 || l1 != l4 {
+		return fmt.Errorf("lengths don't match %v %v %v %v", l1, l2, l3, l4)
 	}
 	// the following check isn't strictly necessary as it would be caught by data gas processing
 	// (and hence it is not explicitly in the spec for this function), but it doesn't hurt to fail
