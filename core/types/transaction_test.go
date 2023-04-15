@@ -78,6 +78,21 @@ var (
 	)
 )
 
+// Returns a wrapper consisting of a single blob of all zeros that passes validation along with its
+// versioned hash.
+func oneEmptyBlobWrapData() (wrap *BlobTxWrapData, versionedHashes VersionedHashesView) {
+	cryptoCtx := kzg.CrpytoCtx()
+	blob := Blob{}
+	commitment, _ := cryptoCtx.BlobToKZGCommitment(gokzg4844.Blob(blob))
+	proof, _ := cryptoCtx.ComputeBlobKZGProof(gokzg4844.Blob(blob), commitment)
+	wrapData := &BlobTxWrapData{
+		BlobKzgs: BlobKzgs{KZGCommitment(commitment)},
+		Blobs:    Blobs{Blob(blob)},
+		Proofs:   KZGProofs{KZGProof(proof)},
+	}
+	return wrapData, VersionedHashesView{common.Hash(kzg.KZGToVersionedHash(gokzg4844.KZGCommitment(wrapData.BlobKzgs[0])))}
+}
+
 func TestDecodeEmptyTypedTx(t *testing.T) {
 	input := []byte{0x80}
 	var tx Transaction
@@ -483,26 +498,16 @@ func TestTransactionCoding(t *testing.T) {
 				AccessList: accesses,
 			}
 		case 6:
-			txdata = &SignedBlobTx{
-				Message: BlobTxMessage{
-					ChainID:             view.Uint256View(*uint256.NewInt(1)),
-					Nonce:               view.Uint64View(i),
-					Gas:                 view.Uint64View(123457),
-					GasTipCap:           view.Uint256View(*uint256.NewInt(42)),
-					GasFeeCap:           view.Uint256View(*uint256.NewInt(10)),
-					AccessList:          AccessListView(accesses),
-					BlobVersionedHashes: VersionedHashesView{common.HexToHash("0x010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014")},
-				},
+			msg := BlobTxMessage{
+				ChainID:    view.Uint256View(*uint256.NewInt(1)),
+				Nonce:      view.Uint64View(i),
+				Gas:        view.Uint64View(123457),
+				GasTipCap:  view.Uint256View(*uint256.NewInt(42)),
+				GasFeeCap:  view.Uint256View(*uint256.NewInt(10)),
+				AccessList: AccessListView(accesses),
 			}
-			cryptoCtx := kzg.CrpytoCtx()
-			blob := Blob{}
-			commitment, _ := cryptoCtx.BlobToKZGCommitment(gokzg4844.Blob(blob))
-			proof, _ := cryptoCtx.ComputeBlobKZGProof(gokzg4844.Blob(blob), commitment)
-			wrapData = &BlobTxWrapData{
-				BlobKzgs: BlobKzgs{KZGCommitment(commitment)},
-				Blobs:    Blobs{Blob(blob)},
-				Proofs:   KZGProofs{KZGProof(proof)},
-			}
+			wrapData, msg.BlobVersionedHashes = oneEmptyBlobWrapData()
+			txdata = &SignedBlobTx{Message: msg}
 		}
 		tx, err := SignNewTx(key, signer, txdata, WithTxWrapData(wrapData))
 		if err != nil {
