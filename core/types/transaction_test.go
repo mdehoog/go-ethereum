@@ -28,12 +28,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crate-crypto/go-proto-danksharding-crypto/api"
+	gokzg4844 "github.com/crate-crypto/go-kzg-4844"
 	"github.com/holiman/uint256"
 	"github.com/protolambda/ztyp/view"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/kzg"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -493,10 +494,14 @@ func TestTransactionCoding(t *testing.T) {
 					BlobVersionedHashes: VersionedHashesView{common.HexToHash("0x010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014")},
 				},
 			}
+			cryptoCtx := kzg.CrpytoCtx()
+			blob := Blob{}
+			commitment, _ := cryptoCtx.BlobToKZGCommitment(gokzg4844.Blob(blob))
+			proof, _ := cryptoCtx.ComputeBlobKZGProof(gokzg4844.Blob(blob), commitment)
 			wrapData = &BlobTxWrapData{
-				BlobKzgs: BlobKzgs{KZGCommitment{0: 0xc0}},
-				Blobs:    Blobs{Blob{}},
-				Proofs:   KZGProofs{api.ZERO_POINT},
+				BlobKzgs: BlobKzgs{KZGCommitment(commitment)},
+				Blobs:    Blobs{Blob(blob)},
+				Proofs:   KZGProofs{KZGProof(proof)},
 			}
 		}
 		tx, err := SignNewTx(key, signer, txdata, WithTxWrapData(wrapData))

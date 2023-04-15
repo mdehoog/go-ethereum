@@ -21,7 +21,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/crate-crypto/go-proto-danksharding-crypto/api"
+	//gokzg4844 "github.com/crate-crypto/go-kzg-4844"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -100,7 +100,7 @@ func TestEIP4844Signing(t *testing.T) {
 	wrapData := &BlobTxWrapData{
 		BlobKzgs: BlobKzgs{KZGCommitment{0: 0xc0}},
 		Blobs:    Blobs{Blob{}},
-		Proofs:   KZGProofs{api.ZERO_POINT},
+		Proofs:   KZGProofs{KZGProof{}},
 	}
 	tx := NewTx(txdata, WithTxWrapData(wrapData))
 	tx, err := SignTx(tx, signer, key)
