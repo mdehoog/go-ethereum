@@ -76,8 +76,7 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	var versionedHash [32]byte
 	copy(versionedHash[:], input[:32])
 
-	var x gokzg4844.Scalar
-	var y gokzg4844.KZGProof
+	var x, y gokzg4844.Scalar
 	// Evaluation point: next 32 bytes
 	copy(x[:], input[32:64])
 	// Expected output: next 32 bytes
@@ -91,11 +90,11 @@ func PointEvaluationPrecompile(input []byte) ([]byte, error) {
 	}
 
 	// Quotient kzg: next 48 bytes
-	var quotientKZG gokzg4844.Scalar
+	var quotientKZG gokzg4844.KZGProof
 	copy(quotientKZG[:], input[144:PrecompileInputLength])
 
 	cryptoCtx := CrpytoCtx()
-	err := cryptoCtx.VerifyKZGProof(dataKZG, quotientKZG, x, y)
+	err := cryptoCtx.VerifyKZGProof(dataKZG, x, y, quotientKZG)
 	if err != nil {
 		return nil, fmt.Errorf("verify_kzg_proof error: %v", err)
 	}
