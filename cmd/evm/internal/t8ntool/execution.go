@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/kzg"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -179,6 +180,11 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		msg, err := core.TransactionToMessage(tx, signer, pre.Env.BaseFee)
 		if tx.Type() == types.BlobTxType && len(tx.DataHashes()) == 0 {
 			err = fmt.Errorf("blob transaction with zero blobs")
+		}
+		for _, h := range tx.DataHashes() {
+			if h[0] != kzg.BlobCommitmentVersionKZG {
+				err = fmt.Errorf("unversioned blob hash: %v", h)
+			}
 		}
 		if err != nil {
 			log.Warn("rejected tx", "index", i, "hash", tx.Hash(), "error", err)
